@@ -1,0 +1,232 @@
+[tool.ruff]
+line-length = 120
+
+# Enable Pyflakes `E` and `F` codes by default.
+select = [
+  "E",  # pycodestyle Error
+  "F",  # Pyflakes
+  "B",  # flake8-bugbear
+  "W",  # pycodestyle Warning
+  "I",  # isort
+  "N",  # pep8-naming
+  "D",  # pydocstyle
+  "PL", # Pylint
+]
+ignore = [
+  "D107", # Missing docstring in `__init__`
+  "D203", # 1 blank line required before class docstring
+  "D212", # Multi-line docstring summary should start at the first line
+  "F403",
+  "F405",
+  "D102",
+  "D100",
+  "D101",
+  "D103",
+  "I001",
+  "PLW0603",
+  "PLR0913",
+  "PLR0915",
+  "PLR0911",
+  "PLR0912",
+  "B008",
+  "D202",
+  "D213",
+  "D105",
+  "D400",
+  "D415",
+  "D106",
+  "PLR2004",
+  "PLW2901",
+  "D104",
+  "B905",
+]
+# Exclude a variety of commonly ignored directories.
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".hg",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "venv",
+]
+per-file-ignores = {}
+
+# Allow unused variables when underscore-prefixed.
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+target-version = "py311"
+
+[tool.black]
+line-length = 120
+include = '\.pyi?$'
+exclude = '''
+(
+  /(
+    | \.git
+    | \.env
+    | \.venv
+    | \src\alembic
+  )/
+)
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+line_length = 120
+
+
+[tool.pylint]
+    [tool.pylint.master]
+    ignore = ['CVS']
+    disable=['C2001', 'R0801', 'W0614']
+    jobs = 1
+    persistent = ['yes']
+    unsafe-load-any-extension=['no']
+    max-complexity = 7
+    max-try-statements = 7
+    max-return-statements = 6
+    suggestion-mode = ['yes']
+    load-plugins = [
+        "pylint.extensions.mccabe",
+        "pylint.extensions.bad_builtin",
+        "pylint.extensions.check_elif",
+        "pylint.extensions.broad_try_clause",
+        "pylint.extensions.redefined_variable_type",
+        "pylint.extensions.overlapping_exceptions",
+        "pylint.extensions.comparetozero",
+        "pylint.extensions.emptystring"
+    ]
+
+    [tool.pylint.'MESSAGES CONTROL']
+    disable = [
+        "logging-fstring-interpolation", # for f-string logs
+        "import-error",
+        "no-name-in-module",
+        "missing-module-docstring",
+        "missing-class-docstring",
+        "missing-function-docstring",
+        "too-few-public-methods",
+        "bad-continuation", # https://github.com/ambv/black/issues/48#issuecomment-408213493
+        "fixme",
+        "unexpected-keyword-arg",  # https://github.com/PyCQA/pylint/issues/6550
+    ]
+
+    enable = 'c-extension-no-member'
+
+    [tool.pylint.'REPORTS']
+    evaluation = '10.0 - ((float(5 * error + warning + refactor + convention) / statement) * 10)'
+    output-format = 'parseable'
+    reports = 'no'
+    score = 'yes'
+
+    [tool.pylint.'REFACTORING']
+    max-nested-blocks = 5
+    never-returning-functions = ['optparse.Values','sys.exit']
+
+    [tool.pylint.'LOGGING']
+    logging-modules = 'logging'
+    logging-format-style = 'new'
+
+    [tool.pylint.'SPELLING']
+    max-spelling-suggestions = 4
+    spelling-store-unknown-words = 'no'
+
+    [tool.pylint.'MISCELLANEOUS']
+    notes = ['FIXME,XXX,TODO']
+
+    [tool.pylint.'TYPECHECK']
+    contextmanager-decorators = ['contextlib.contextmanager']
+    ignore-mixin-members = 'yes'
+    ignore-on-opaque-inference = 'yes'
+    ignored-classes = 'optparse.Values,thread._local,_thread._local'
+    ignored-modules = 'asyncio'
+    missing-member-hint = 'yes'
+    missing-member-hint-distance = 1
+    missing-member-max-choices = 1
+    allow-global-unused-variables = 'yes'
+    callbacks = ['cb_', '_cb']
+    dummy-variables-rgx = '_+$|(_[a-zA-Z0-9_]*[a-zA-Z0-9]+?$)|dummy|^ignored_|^unused_'
+    ignored-argument-names = '_.*|^ignored_|^unused_'
+    init-import = 'no'
+    redefining-builtins-modules = ['six.moves', 'past.builtins', 'future.builtins', 'io']
+
+    [tool.pylint.'FORMAT']
+    ignore-long-lines = '^\s*(# )?<?https?://\S+>?$'
+    indent-after-paren = 4
+    max-line-length=120
+    max-module-lines=300
+    no-space-check = ['trailing-comma', 'dict-separator']
+    single-line-class-stmt = 'no'
+    single-line-if-stmt = 'no'
+
+    [tool.pylint.'SIMILARITIES']
+    ignore-comments = 'yes'
+    ignore-docstrings = 'yes'
+    ignore-imports = 'no'
+    min-similarity-lines = 4
+
+    [tool.pylint.'BASIC']
+    argument-naming-style = 'snake_case'
+    attr-naming-style = 'snake_case'
+    bad-names=['foo', 'bar', 'baz', 'toto', 'tutu', 'tata']
+    class-attribute-naming-style = 'any'
+    class-naming-style = 'PascalCase'
+    const-naming-style = 'UPPER_CASE'
+    docstring-min-length = -1
+    function-naming-style = 'snake_case'
+    good-names=['i', 'j', 'k', 'x', 'ex', 'Run', '_', 'ts', 'db', 'f', 'env', 'id', 'revision', 'down_revision', 'branch_labels', 'depends_on', '40204983a399_initial', '5ba58f59f914_initial_2', '5b01902dba1b_extra_event_data']
+    include-naming-hint = 'yes'
+    inlinevar-naming-style = 'any'
+    method-naming-style = 'snake_case'
+    module-naming-style = 'snake_case'
+    no-docstring-rgx = '^_'
+    property-classes = 'abc.abstractproperty'
+    variable-naming-style = 'snake_case'
+
+    [tool.pylint.'IMPORTS']
+    allow-wildcard-with-all = 'no'
+    analyse-fallback-blocks = 'no'
+    deprecated-modules = ['optparse', 'tkinter.tix']
+    known-third-party = 'enchant'
+
+    [tool.pylint.'CLASSES']
+    defining-attr-methods = ['__init__', '__new__', 'setUp']
+    exclude-protected = ['_asdict', '_fields', '_replace', '_source', '_make']
+    valid-classmethod-first-arg = 'cls'
+    valid-metaclass-classmethod-first-arg = 'mcs'
+
+    [tool.pylint.'DESIGN']
+    max-args=6
+    max-attributes=10
+    max-bool-expr=5
+    max-branches=8
+    max-locals=10
+    max-parents=4
+    max-public-methods=12
+    max-returns=5
+    max-statements=30
+    min-public-methods=0
+
+    [tool.pylint.'EXCEPTIONS']
+    overgeneral-exceptions = 'Exception'
+
+[tool.pytest.ini_options]
+    asyncio_mode = 'auto'
