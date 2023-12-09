@@ -15,14 +15,6 @@ class Migration:
     rollback: SQL
 
 
-class UpMigration(Migration):
-    ...
-
-
-class RollbackMigration(Migration):
-    ...
-
-
 @dataclass
 class Settings:
     MIGRATIONS_DIR: str = os.getenv("CLICKHOUSE_MIGRATE_DIR", "./db/migrations")
@@ -32,11 +24,11 @@ class Settings:
 settings = Settings()
 MIGRATION_TEMPLATE: str = '''
 def up() -> str:
-    return """"""
+    return """ """
 
 
 def rollback() -> str:
-    return """"""
+    return """ """
 '''
 
 
@@ -79,7 +71,7 @@ class Migrator(object):
             os.makedirs(self.migrations_dir)
 
     def up(self, n: int = None) -> None:
-        migrations: list[UpMigration] = self.get_migrations_for_apply(n)
+        migrations: list[Migration] = self.get_migrations_for_apply(n)
         for migration in migrations:
             self.apply_migration(query=migration.up)
             self.save_applied_migration(
@@ -91,7 +83,7 @@ class Migrator(object):
         self.save_current_schema()
 
     def rollback(self, n: int = 1) -> None:
-        migrations: list[RollbackMigration] = self.get_migrations_for_rollback(n)
+        migrations: list[Migration] = self.get_migrations_for_rollback(n)
         for migration in migrations:
             # TODO open transaction?
             self.apply_migration(
@@ -100,21 +92,23 @@ class Migrator(object):
             self.delete_migration(
                 name=migration.name,
             )
-            print(f"{migration.name} rolled back [].")
+            print(f"{migration.name} rolled back [✔].")
         self.save_current_schema()
 
-    def apply_migration(self, query: str) -> None:
+    def apply_migration(self, query: SQL) -> None:
         queries: list[SQL] = query.split(";")
-        # TODO transation
         for query in queries:
             if not query:
                 continue
             self.ch_client.execute(query)
 
-    def get_migrations_for_apply(self, n: int = None) -> list[Migration]:
+    def get_migrations_for_apply(self, number: int = None) -> list[Migration]:
         filenames: list[str] = [file for file in os.listdir(self.migrations_dir) if file.endswith(".py")]
         applied_migrations: list[str] = self.get_applied_migrations_names()
         filenames: list[str] = sorted(list(set(filenames) - set(applied_migrations)))
+
+        if number:
+            filenames: list[str] = filenames[:number]
 
         result = []
         for filename in filenames:
@@ -132,11 +126,12 @@ class Migrator(object):
     def get_applied_migrations_names(self) -> list[str]:
         return [row[0] for row in self.ch_client.execute("SELECT name FROM db_migrations")]
 
-    def get_migrations_for_rollback(self, n: int = 1) -> list[RollbackMigration]:
+    def get_migrations_for_rollback(self, number: int = 1) -> list[Migration]:
+        assert number > 0
         return [
             Migration(name=row[0], up=row[1], rollback=row[2])
             for row in self.ch_client.execute(
-                f"SELECT name, up, rollback FROM db_migrations ORDER BY dt DESC LIMIT {n}"
+                f"SELECT name, up, rollback FROM db_migrations ORDER BY dt DESC LIMIT {number}"
             )
         ]
 
@@ -160,6 +155,7 @@ class Migrator(object):
         for table in tables:
             schema: list[tuple[str]] = self.ch_client.execute(f"SHOW CREATE TABLE {table[0]}")
             result += f"{schema[0][0]}\n\n"
+        result = result.replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS")
         schema_path: str = f"{self.migrations_dir.rsplit('/', 1)[0]}/schema.sql"
         with open(schema_path, "w") as f:
             f.write(result)
