@@ -65,7 +65,7 @@ class Migrator(object):
         try:
             self.ch_client.execute("SELECT 1")
         except Exception as exc:
-            print(f"ClickHouse server in not healthy: {exc}.")
+            raise Exception(f"ClickHouse server in not healthy: {exc}.") from exc
 
     def get_db_name(self) -> str:
         db_name: str = self.database_url.rsplit("/", 1)[-1]
@@ -79,6 +79,8 @@ class Migrator(object):
 
     def up(self, n: int = None) -> None:
         migrations: list[Migration] = self.get_migrations_for_apply(n)
+        if not migrations:
+            print("There is no migrations for apply.")
         for migration in migrations:
             self.apply_migration(query=migration.up)
             self.save_applied_migration(
