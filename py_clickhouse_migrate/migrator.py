@@ -41,6 +41,7 @@ class Migrator(object):
         self.database_url: str = database_url
         self.ch_client: Client = Client.from_url(database_url)
         self.migrations_dir: str = migrations_dir
+        self.health_check()
 
     def init(self) -> None:
         self.create_migrations_directory()
@@ -59,6 +60,12 @@ class Migrator(object):
         """
         self.ch_client.execute(migrator_table)
         print(f"Migrations directory {self.migrations_dir} sucessfully initialized.")
+
+    def health_check(self) -> None:
+        try:
+            self.ch_client.execute("SELECT 1")
+        except Exception as exc:
+            print(f"ClickHouse server in not healthy: {exc}.")
 
     def get_db_name(self) -> str:
         db_name: str = self.database_url.rsplit("/", 1)[-1]
