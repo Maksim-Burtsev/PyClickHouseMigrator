@@ -190,8 +190,19 @@ def test_apply_migration_multiquery(migrator: Migrator, ch_client: Client):
 #     pass
 
 
-# def test_delete_migration():
-#     pass
+def test_delete_migration(migrator: Migrator, ch_client: Client, migrator_init):
+    assert not ch_client.execute("SELECT * FROM db_migrations")
+    ch_client.execute(
+        "INSERT INTO db_migrations (name, up, rollback) VALUES "
+        "('test.sql',"
+        " 'CREATE TABLE IF NOT EXISTS test_table (id Integer) Engine=MergeTree() ORDER BY id;',"
+        " 'DROP TABLE IF EXISTS test_table')"
+    )
+    assert ch_client.execute("SELECT count() FROM db_migrations WHERE name='test.sql'")[0][0] == 1
+
+    migrator.delete_migration("test.sql")
+
+    assert not ch_client.execute("SELECT * FROM db_migrations")
 
 
 # def test_save_current_schema():
