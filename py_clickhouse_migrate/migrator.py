@@ -6,6 +6,12 @@ from importlib.machinery import SourceFileLoader
 from clickhouse_driver import Client
 
 SQL = str
+DEFAULT_DATABASE_URL: str = "clickhouse://default@127.0.0.1:9000/default"
+DEFATULT_MIGRATIONS_DIR: str = "./db/migrations"
+
+
+class ClickHouseServerIsNotHealthyError(Exception):
+    ...
 
 
 @dataclass
@@ -17,8 +23,8 @@ class Migration:
 
 @dataclass
 class Settings:
-    MIGRATIONS_DIR: str = os.getenv("CLICKHOUSE_MIGRATE_DIR", "./db/migrations")
-    DATABASE_URL: str = os.getenv("CLICKHOUSE_MIGRATE_URL", "clickhouse://default@127.0.0.1:9000/default")
+    MIGRATIONS_DIR: str = os.getenv("CLICKHOUSE_MIGRATE_DIR", DEFATULT_MIGRATIONS_DIR)
+    DATABASE_URL: str = os.getenv("CLICKHOUSE_MIGRATE_URL", DEFAULT_DATABASE_URL)
 
 
 settings = Settings()
@@ -65,7 +71,7 @@ class Migrator(object):
         try:
             self.ch_client.execute("SELECT 1")
         except Exception as exc:
-            raise Exception(f"ClickHouse server in not healthy: {exc}.") from exc
+            raise ClickHouseServerIsNotHealthyError(f"ClickHouse server in not healthy: {exc}.") from exc
 
     def get_db_name(self) -> str:
         db_name: str = self.database_url.rsplit("/", 1)[-1]
