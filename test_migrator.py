@@ -11,7 +11,9 @@ from py_clickhouse_migrate.migrator import DEFATULT_MIGRATIONS_DIR, ClickHouseSe
 @pytest.fixture(scope="function")
 def migrator_init(migrator: Migrator, ch_client: Client):
     migrator.init()
+
     yield
+
     # clean
     shutil.rmtree("./db")
     ch_client.execute("DROP TABLE IF EXISTS db_migrations")
@@ -104,8 +106,36 @@ def apply_migration_one_query(migrator: Migrator, ch_client: Client):
     ch_client.execute("DROP TABLE IF EXISTS test_table")
 
 
-# def test_apply_migration_multiquery():
-#     pass
+def test_apply_migration_multiquery(migrator: Migrator, ch_client: Client):
+    with pytest.raises(ServerException):
+        ch_client.execute("CHECK TABLE test_table_int_id")
+
+    with pytest.raises(ServerException):
+        ch_client.execute("CHECK TABLE test_table_str_id")
+
+    migrator.apply_migration(
+        "CREATE TABLE IF NOT EXISTS test_table_int_id (id Integer) Engine=MergeTree() ORDER BY id;"
+        "CREATE TABLE IF NOT EXISTS test_table_str_id (id String) Engine=MergeTree() ORDER BY id;"
+        "INSERT INTO TABLE test_table_int_id VALUES (1), (2), (3);"
+        "INSERT INTO TABLE test_table_str_id VALUES ('17afaed9-ef50-4a2e-a91d-af7cc8344033'),"
+        " ('744aa7d7-568b-48f2-80a1-ef0aaf18fc1b'), ('22405e14-e82a-4ab7-a502-05b40bbbd791')"
+    )
+
+    assert ch_client.execute("CHECK TABLE test_table_int_id")
+    assert ch_client.execute("DESCRIBE TABLE test_table_int_id")[0][:2] == ("id", "Int32")
+    assert ch_client.execute("CHECK TABLE test_table_str_id")
+    assert ch_client.execute("DESCRIBE TABLE test_table_str_id")[0][:2] == ("id", "String")
+
+    assert ch_client.execute("SELECT id FROM test_table_int_id") == [(1,), (2,), (3,)]
+    assert ch_client.execute("SELECT id FROM test_table_str_id") == [
+        ("17afaed9-ef50-4a2e-a91d-af7cc8344033",),
+        ("22405e14-e82a-4ab7-a502-05b40bbbd791",),
+        ("744aa7d7-568b-48f2-80a1-ef0aaf18fc1b",),
+    ]
+
+    # clean
+    ch_client.execute("DROP TABLE IF EXISTS test_table_int_id")
+    ch_client.execute("DROP TABLE IF EXISTS test_table_str_id")
 
 
 # def test_get_migrations_for_apply():
