@@ -8,6 +8,15 @@ from clickhouse_driver.errors import ServerException
 from py_clickhouse_migrate.migrator import DEFATULT_MIGRATIONS_DIR, ClickHouseServerIsNotHealthyError, Migrator
 
 
+@pytest.fixture(scope="function")
+def migrator_init(migrator: Migrator, ch_client: Client):
+    migrator.init()
+    yield
+    # clean
+    shutil.rmtree("./db")
+    ch_client.execute("DROP TABLE IF EXISTS db_migrations")
+
+
 def test_init_base(migrator: Migrator, ch_client: Client):
     with pytest.raises(ServerException):
         ch_client.execute("CHECK TABLE db_migrations")
@@ -51,16 +60,48 @@ def test_init_with_invalid_database_url(test_db: str):
         Migrator(default_db_url)
 
 
-# def test_create_migrations_directory():
-#     pass
+def test_create_existend_migrations_directory(migrator: Migrator, ch_client: Client):
+    os.makedirs(DEFATULT_MIGRATIONS_DIR)
+    with open(f"{DEFATULT_MIGRATIONS_DIR}/test_migration.sql", "w"):
+        ...
+    assert os.path.exists(DEFATULT_MIGRATIONS_DIR)
+    with pytest.raises(ServerException):
+        ch_client.execute("CHECK TABLE db_migrations")
+
+    migrator.init()
+    assert ch_client.execute("CHECK TABLE db_migrations")
+    assert os.path.exists(DEFATULT_MIGRATIONS_DIR)
+    assert os.path.exists(f"{DEFATULT_MIGRATIONS_DIR}/test_migration.sql")
+
+    # clean
+    shutil.rmtree("./db")
+    ch_client.execute("DROP TABLE IF EXISTS db_migrations")
 
 
-# def test_create_existend_migrations_directory():
-#     pass
+def test_create_new_migration(migrator: Migrator, ch_client: Client, migrator_init):
+    assert not os.listdir(DEFATULT_MIGRATIONS_DIR)
+    assert not ch_client.execute("SELECT count() FROM db_migrations")[0][0]
+
+    migrator.create_new_migration("first_migration")
+    assert not ch_client.execute("SELECT count() FROM db_migrations")[0][0]
+    migration_filenames: list[str] = os.listdir(DEFATULT_MIGRATIONS_DIR)
+    assert len(migration_filenames) == 1
+
+    filename: str = migration_filenames[0]
+    assert filename.startswith("0")
+    assert "_first_migration.py" in filename
 
 
-# def apply_migration_one_query():
-#     pass
+def apply_migration_one_query(migrator: Migrator, ch_client: Client):
+    with pytest.raises(ServerException):
+        ch_client.execute("CHECK TABLE test_table")
+
+    migrator.apply_migration("CREATE TABLE IF NOT EXISTS test_table (id Integer) Engine=MergeTree() ORDER BY id;")
+    assert ch_client.execute("CHECK TABLE test_table")
+    assert ch_client.execute("DESCRIBE TABLE test_table")[0][:2] == ("id", "Int32")
+
+    # clean
+    ch_client.execute("DROP TABLE IF EXISTS test_table")
 
 
 # def test_apply_migration_multiquery():

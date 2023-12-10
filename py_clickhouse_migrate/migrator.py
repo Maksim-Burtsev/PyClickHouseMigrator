@@ -100,7 +100,7 @@ class Migrator(object):
     def rollback(self, n: int = 1) -> None:
         migrations: list[Migration] = self.get_migrations_for_rollback(n)
         for migration in migrations:
-            # TODO open transaction?
+            # TODO open transaction by with flag (for enabled setting)
             self.apply_migration(
                 query=migration.rollback,
             )
