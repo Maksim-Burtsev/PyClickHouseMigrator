@@ -6,6 +6,7 @@ from importlib.machinery import SourceFileLoader
 from clickhouse_driver import Client
 
 SQL = str
+
 DEFAULT_DATABASE_URL: str = "clickhouse://default@127.0.0.1:9000/default"
 DEFATULT_MIGRATIONS_DIR: str = "./db/migrations"
 
@@ -143,16 +144,18 @@ class Migrator(object):
         return [row[0] for row in self.ch_client.execute("SELECT name FROM db_migrations")]
 
     def get_migrations_for_rollback(self, number: int = 1) -> list[Migration]:
-        assert number > 0
+        assert number > 0  # TODO move validation in separate method
         return [
             Migration(name=row[0], up=row[1], rollback=row[2])
             for row in self.ch_client.execute(
                 f"SELECT name, up, rollback FROM db_migrations ORDER BY dt DESC LIMIT {number}"
             )
         ]
+        # TODO assert len(result) == number?
 
     def get_new_migration_filename(self, name: str = "") -> str:
         number: int = self.ch_client.execute("SELECT count() FROM db_migrations LIMIT 1")[0][0]
+        # TODO remove number from name
         filename: str = f"{number}_{str(dt.datetime.now().strftime('%Y%m%d%H%S')).replace(' ', '_')}"
         if name:
             filename += f"_{name}"
@@ -182,3 +185,5 @@ class Migrator(object):
 
     def delete_migration(self, name: str) -> None:
         self.ch_client.execute(f"DELETE FROM db_migrations WHERE name='{name}'")
+
+    # TODO show applied migrations history
