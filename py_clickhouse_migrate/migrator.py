@@ -99,8 +99,8 @@ class Migrator(object):
             print(f"{migration.name} applied [✔]")
         self.save_current_schema()
 
-    def rollback(self, n: int = 1) -> None:
-        migrations: list[Migration] = self.get_migrations_for_rollback(n)
+    def rollback(self, number: int = 1) -> None:
+        migrations: list[Migration] = self.get_migrations_for_rollback(number=number)
         for migration in migrations:
             # TODO open transaction by with flag (for enabled setting)
             self.apply_migration(
@@ -148,7 +148,7 @@ class Migrator(object):
         return sorted(list(set(filenames) - set(applied_migrations)))
 
     def get_applied_migrations_names(self) -> list[str]:
-        return [row[0] for row in self.ch_client.execute("SELECT name FROM db_migrations")]
+        return [row[0] for row in self.ch_client.execute("SELECT name FROM db_migrations ORDER BY dt")]
 
     def get_migrations_for_rollback(self, number: int = 1) -> list[Migration]:
         assert number > 0  # TODO move validation in separate method

@@ -1,4 +1,5 @@
 import os
+import re
 import shutil
 
 import pytest
@@ -11,6 +12,8 @@ from py_clickhouse_migrate.migrator import (
     Migration,
     Migrator,
 )
+
+MIGRATION_FILENAME_REGEX = re.compile(r"^\d{8}\d{4}(?:_\w+)*\.py$")
 
 TEST_MIGRATION_TEMPLATE: str = '''
 def up() -> str:
@@ -45,6 +48,46 @@ def migrator_init(migrator: Migrator, ch_client: Client):
     # clean
     shutil.rmtree("./db")
     ch_client.execute("DROP TABLE IF EXISTS db_migrations")
+
+
+@pytest.fixture(scope="function")
+def test_table_from_migration(migrator: Migrator, migrator_init: None, ch_client: Client) -> str:
+    filename: str = create_test_migration(
+        name="test_1",
+        up="CREATE TABLE IF NOT EXISTS test_table (id Integer) Engine=MergeTree() ORDER BY id;",
+        rollback="DROP TABLE IF EXISTS test_table",
+    )
+    migrator.up()
+
+    yield filename
+
+    ch_client.execute("DROP TABLE IF EXISTS test_table")
+
+
+@pytest.fixture(scope="function")
+def test_tables_from_migration(migrator: Migrator, migrator_init: None, ch_client: Client) -> list[str]:
+    filename_1: str = create_test_migration(
+        name="test_1",
+        up="CREATE TABLE IF NOT EXISTS test_table_1 (id Integer) Engine=MergeTree() ORDER BY id;",
+        rollback="DROP TABLE IF EXISTS test_table_2",
+    )
+    filename_2: str = create_test_migration(
+        name="test_2",
+        up="CREATE TABLE IF NOT EXISTS test_table_2 (id String) Engine=MergeTree() ORDER BY id;",
+        rollback="DROP TABLE IF EXISTS test_table_2",
+    )
+    filename_3: str = create_test_migration(
+        name="test_3",
+        up="CREATE TABLE IF NOT EXISTS test_table_3 (id String) Engine=MergeTree() ORDER BY id;",
+        rollback="DROP TABLE IF EXISTS test_table_3",
+    )
+    migrator.up()
+
+    yield [filename_1, filename_2, filename_3]
+
+    ch_client.execute("DROP TABLE IF EXISTS test_table_1")
+    ch_client.execute("DROP TABLE IF EXISTS test_table_2")
+    ch_client.execute("DROP TABLE IF EXISTS test_table_3")
 
 
 def test_init_base(migrator: Migrator, ch_client: Client):
@@ -111,7 +154,7 @@ def test_create_existend_migrations_directory(migrator: Migrator, ch_client: Cli
     ch_client.execute("DROP TABLE IF EXISTS db_migrations")
 
 
-def test_create_new_migration(migrator: Migrator, ch_client: Client, migrator_init):
+def test_create_new_migration(migrator: Migrator, ch_client: Client, migrator_init: None):
     assert not os.listdir(DEFATULT_MIGRATIONS_DIR)
     assert not ch_client.execute("SELECT count() FROM db_migrations")[0][0]
 
@@ -168,14 +211,14 @@ def test_apply_migration_multiquery(migrator: Migrator, ch_client: Client):
     ch_client.execute("DROP TABLE IF EXISTS test_table_str_id")
 
 
-def test_get_migrations_for_apply_empty(migrator: Migrator, migrator_init):
+def test_get_migrations_for_apply_empty(migrator: Migrator, migrator_init: None):
     filepath: str = migrator.create_new_migration(name="test")
     assert os.path.exists(filepath)
 
     assert not migrator.get_migrations_for_apply()
 
 
-def test_get_all_migrations_for_apply(migrator: Migrator, migrator_init):
+def test_get_all_migrations_for_apply(migrator: Migrator, migrator_init: None):
     migration_1: str = create_test_migration(
         name="test_1",
         up="CREATE TABLE IF NOT EXISTS test_table_1 (id Integer) Engine=MergeTree() ORDER BY id;",
@@ -200,7 +243,7 @@ def test_get_all_migrations_for_apply(migrator: Migrator, migrator_init):
     assert migrations[1].rollback == "DROP TABLE IF EXISTS test_table_2"
 
 
-def test_get_few_migrations_for_apply_with_number(migrator: Migrator, migrator_init, ch_client: Client):
+def test_get_few_migrations_for_apply_with_number(migrator: Migrator, migrator_init: None, ch_client: Client):
     migration_1: str = create_test_migration(
         name="test_1",
         up="CREATE TABLE IF NOT EXISTS test_table_1 (id Integer) Engine=MergeTree() ORDER BY id;",
@@ -230,52 +273,204 @@ def test_get_few_migrations_for_apply_with_number(migrator: Migrator, migrator_i
     assert migrations[1].rollback == "DROP TABLE IF EXISTS test_table_2"
 
     assert os.path.exists(f"{DEFATULT_MIGRATIONS_DIR}/{migration_3}")
-    assert not ch_client.execute("SELECT * FROM db_migrations WHERE name='test_table_3'")
+    assert not ch_client.execute(f"SELECT * FROM db_migrations WHERE name='{migration_3}'")
 
     assert len(migrator.get_migrations_for_apply()) == 3  # get migrations for apply without number
 
 
-# def test_get_migrations_for_rollback():
-#     pass
+def test_get_migrations_for_rollback(migrator: Migrator, test_tables_from_migration: list[str], ch_client: Client):
+    assert ch_client.execute("SELECT count() from db_migrations")[0][0] == 3
+
+    migrations: list[Migration] = migrator.get_migrations_for_rollback(number=2)
+
+    assert len(migrations) == 2
+    assert migrations[0].name == test_tables_from_migration[2]
+    assert migrations[0].up == "CREATE TABLE IF NOT EXISTS test_table_3 (id String) Engine=MergeTree() ORDER BY id;"
+    assert migrations[0].rollback == "DROP TABLE IF EXISTS test_table_3"
+
+    assert migrations[1].name == test_tables_from_migration[1]
+    assert migrations[1].up == "CREATE TABLE IF NOT EXISTS test_table_2 (id String) Engine=MergeTree() ORDER BY id;"
+    assert migrations[1].rollback == "DROP TABLE IF EXISTS test_table_2"
+
+    assert (
+        ch_client.execute(f"SELECT count() FROM db_migrations WHERE name='{test_tables_from_migration[0]}'")[0][0] == 1
+    )
+    all_migrations_for_rollback: list[Migration] = migrator.get_migrations_for_rollback()
+    assert len(all_migrations_for_rollback) == 1  # by default 1
+    assert all_migrations_for_rollback[0].name == test_tables_from_migration[2]
+    assert (
+        all_migrations_for_rollback[0].up
+        == "CREATE TABLE IF NOT EXISTS test_table_3 (id String) Engine=MergeTree() ORDER BY id;"
+    )
+    assert all_migrations_for_rollback[0].rollback == "DROP TABLE IF EXISTS test_table_3"
 
 
-# def test_get_migrations_for_rollback_with_number():
-#     pass
+def test_get_new_migration_filename(migrator: Migrator):
+    filename: str = migrator.get_new_migration_filename()
+    assert MIGRATION_FILENAME_REGEX.match(filename)
 
 
-# def test_get_new_migration_filename():
-#     pass
+def test_get_new_migration_filename_with_name(migrator: Migrator):
+    filename: str = migrator.get_new_migration_filename("test_migration")
+    assert "_test_migration.py" in filename
+    assert MIGRATION_FILENAME_REGEX.match(filename)
 
 
-# def test_get_new_migration_filename_with_name():
-#     pass
+def test_get_applied_migrations_names(migrator: Migrator, test_tables_from_migration: list[str], ch_client: Client):
+    migration_names: list[str] = migrator.get_applied_migrations_names()
+    assert len(migration_names) == 3
+
+    db_migration_names: list[str] = [row[0] for row in ch_client.execute("SELECT name FROM db_migrations ORDER BY dt")]
+    assert len(db_migration_names) == 3
+
+    assert migration_names == db_migration_names
 
 
-# def test_get_applied_migrations_names():
-#     pass
+def test_up_one_query(migrator: Migrator, migrator_init: None, ch_client: Client):
+    with pytest.raises(ServerException):
+        assert not ch_client.execute("CHECK TABLE test_table")
+
+    filename: str = create_test_migration(
+        name="test",
+        up="CREATE TABLE IF NOT EXISTS test_table (id Integer) Engine=MergeTree() ORDER BY id;",
+        rollback="DROP TABLE IF EXISTS test_table",
+    )
+    assert os.path.exists(f"{DEFATULT_MIGRATIONS_DIR}/{filename}")
+    assert ch_client.execute(f"SELECT count() FROM db_migrations WHERE name='{filename}'")[0][0] == 0
+
+    migrator.up()
+    assert ch_client.execute(f"SELECT count() FROM db_migrations WHERE name='{filename}'")[0][0] == 1
+    assert ch_client.execute("CHECK TABLE test_table")
+    assert ch_client.execute("DESCRIBE TABLE test_table")[0][:2] == ("id", "Int32")
+
+    # clean
+    ch_client.execute("DROP TABLE IF EXISTS test_table")
 
 
-# def test_up_one_query():
-#     pass
+def test_up_multiquery(migrator: Migrator, migrator_init, ch_client: Client):
+    with pytest.raises(ServerException):
+        assert not ch_client.execute("CHECK TABLE test_table_1")
+
+    with pytest.raises(ServerException):
+        assert not ch_client.execute("CHECK TABLE test_table_2")
+
+    filename: str = create_test_migration(
+        name="test_multiquery",
+        up="CREATE TABLE IF NOT EXISTS test_table_1 (id Integer) Engine=MergeTree() ORDER BY id;"
+        "CREATE TABLE IF NOT EXISTS test_table_2 (id String) Engine=MergeTree() ORDER BY id;",
+        rollback="DROP TABLE IF EXISTS test_table_1;DROP TABLE IF EXISTS test_table_2",
+    )
+    assert os.path.exists(f"{DEFATULT_MIGRATIONS_DIR}/{filename}")
+    assert ch_client.execute(f"SELECT count() FROM db_migrations WHERE name='{filename}'")[0][0] == 0
+
+    migrator.up()
+    assert ch_client.execute(f"SELECT count() FROM db_migrations WHERE name='{filename}'")[0][0] == 1
+    assert ch_client.execute("CHECK TABLE test_table_1")
+    assert ch_client.execute("CHECK TABLE test_table_2")
+    assert ch_client.execute("DESCRIBE TABLE test_table_1")[0][:2] == ("id", "Int32")
+    assert ch_client.execute("DESCRIBE TABLE test_table_2")[0][:2] == ("id", "String")
+
+    # clean
+    ch_client.execute("DROP TABLE IF EXISTS test_table_1")
+    ch_client.execute("DROP TABLE IF EXISTS test_table_2")
 
 
-# def test_up_multiquery():
-#     pass
+def test_up_multiply_files(migrator: Migrator, migrator_init, ch_client: Client):
+    with pytest.raises(ServerException):
+        assert not ch_client.execute("CHECK TABLE test_table_1")
+
+    with pytest.raises(ServerException):
+        assert not ch_client.execute("CHECK TABLE test_table_2")
+
+    filename_1: str = create_test_migration(
+        name="test_1",
+        up="CREATE TABLE IF NOT EXISTS test_table_1 (id Integer) Engine=MergeTree() ORDER BY id;",
+        rollback="DROP TABLE IF EXISTS test_table_2",
+    )
+    filename_2: str = create_test_migration(
+        name="test_2",
+        up="CREATE TABLE IF NOT EXISTS test_table_2 (id String) Engine=MergeTree() ORDER BY id;",
+        rollback="DROP TABLE IF EXISTS test_table_2",
+    )
+
+    assert os.path.exists(f"{DEFATULT_MIGRATIONS_DIR}/{filename_1}")
+    assert os.path.exists(f"{DEFATULT_MIGRATIONS_DIR}/{filename_2}")
+    assert ch_client.execute("SELECT count() FROM db_migrations")[0][0] == 0
+
+    migrator.up()
+    assert ch_client.execute("SELECT count() FROM db_migrations")[0][0] == 2
+    assert ch_client.execute("CHECK TABLE test_table_1")
+    assert ch_client.execute("CHECK TABLE test_table_2")
+    assert ch_client.execute("DESCRIBE TABLE test_table_1")[0][:2] == ("id", "Int32")
+    assert ch_client.execute("DESCRIBE TABLE test_table_2")[0][:2] == ("id", "String")
+
+    assert sorted(migrator.get_applied_migrations_names()) == sorted([filename_1, filename_2])
+
+    # clean
+    ch_client.execute("DROP TABLE IF EXISTS test_table_1")
+    ch_client.execute("DROP TABLE IF EXISTS test_table_2")
 
 
-# def test_up_multiply_files():
-#     pass
+def test_rollback_one_query_migration(migrator: Migrator, test_tables_from_migration, ch_client):
+    assert ch_client.execute("SELECT count() FROM db_migrations")[0][0] == 3
+    assert ch_client.execute("CHECK TABLE test_table_3")
+    assert sorted(migrator.get_applied_migrations_names()) == sorted(test_tables_from_migration)
+
+    migrator.rollback()
+
+    assert ch_client.execute("SELECT count() FROM db_migrations")[0][0] == 2
+    assert sorted(migrator.get_applied_migrations_names()) == [
+        test_tables_from_migration[0],
+        test_tables_from_migration[1],
+    ]
+    with pytest.raises(ServerException):
+        assert ch_client.execute("CHECK TABLE test_table_3")
 
 
-# def test_rollback_one_query_migration():
-#     pass
+def test_rollback_multiply_migrations(migrator: Migrator, test_tables_from_migration, ch_client):
+    assert ch_client.execute("SELECT count() FROM db_migrations")[0][0] == 3
+    assert ch_client.execute("CHECK TABLE test_table_3")
+    assert ch_client.execute("CHECK TABLE test_table_2")
+    assert sorted(migrator.get_applied_migrations_names()) == sorted(test_tables_from_migration)
+
+    migrator.rollback(number=2)
+
+    assert ch_client.execute("SELECT count() FROM db_migrations")[0][0] == 1
+    assert sorted(migrator.get_applied_migrations_names()) == [
+        test_tables_from_migration[0],
+    ]
+    with pytest.raises(ServerException):
+        assert ch_client.execute("CHECK TABLE test_table_2")
+    with pytest.raises(ServerException):
+        assert ch_client.execute("CHECK TABLE test_table_3")
 
 
-# def test_rollback_multiply_migrations():
-#     pass
+def test_rollback_multiquery_migration(migrator: Migrator, test_table_from_migration, ch_client):
+    assert ch_client.execute("CHECK TABLE test_table")
+    filename: str = create_test_migration(
+        name="test_multiquery",
+        up="CREATE TABLE IF NOT EXISTS test_table_1 (id Integer) Engine=MergeTree() ORDER BY id;",
+        rollback="DROP TABLE IF EXISTS test_table_1; INSERT INTO test_table(id) VALUES (1),(2),(3);",
+    )
+    migrator.up()
+    assert os.path.exists(f"{DEFATULT_MIGRATIONS_DIR}/{filename}")
+    assert ch_client.execute("CHECK TABLE test_table_1")
+    assert ch_client.execute("SELECT count() FROM test_table")[0][0] == 0
+    assert ch_client.execute(f"SELECT count() FROM db_migrations WHERE name='{filename}'")[0][0] == 1
+    assert ch_client.execute("SELECT count() FROM db_migrations")[0][0] == 2
+
+    migrator.rollback()
+
+    assert ch_client.execute("SELECT count() FROM db_migrations")[0][0] == 1
+    assert ch_client.execute(f"SELECT count() FROM db_migrations WHERE name='{filename}'")[0][0] == 0
+    with pytest.raises(ServerException):
+        assert ch_client.execute("CHECK TABLE test_table_1")
+
+    # check inserted from rollback values
+    assert [row[0] for row in ch_client.execute("SELECT id FROM test_table")] == [1, 2, 3]
 
 
-def test_save_applied_migration(migrator: Migrator, ch_client: Client, migrator_init):
+def test_save_applied_migration(migrator: Migrator, ch_client: Client, migrator_init: None):
     assert not ch_client.execute("SELECT * FROM db_migrations")
 
     migrator.save_applied_migration(
@@ -295,7 +490,7 @@ def test_save_applied_migration(migrator: Migrator, ch_client: Client, migrator_
     ch_client.execute("DELETE FROM db_migrations WHERE name='test'")
 
 
-def test_delete_migration(migrator: Migrator, ch_client: Client, migrator_init):
+def test_delete_migration(migrator: Migrator, ch_client: Client, migrator_init: None):
     assert not ch_client.execute("SELECT * FROM db_migrations")
     ch_client.execute(
         "INSERT INTO db_migrations (name, up, rollback) VALUES "
