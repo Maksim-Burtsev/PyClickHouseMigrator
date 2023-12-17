@@ -65,6 +65,7 @@ class Migrator(object):
         ORDER BY dt
         """
         self.ch_client.execute(migrator_table)
+        self.save_current_schema()
         print(f"Migrations directory {self.migrations_dir} sucessfully initialized.")
 
     def health_check(self) -> None:
@@ -169,7 +170,7 @@ class Migrator(object):
         result: str = "---- Database schema ----\n\n"
         for table in tables:
             schema: list[tuple[str]] = self.ch_client.execute(f"SHOW CREATE TABLE {table[0]}")
-            result += f"{schema[0][0]}\n\n"
+            result += f"{schema[0][0]};\n\n"
         result = result.replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS")
         schema_path: str = f"{self.migrations_dir.rsplit('/', 1)[0]}/schema.sql"
         with open(schema_path, "w") as f:

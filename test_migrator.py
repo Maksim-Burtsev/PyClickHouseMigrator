@@ -23,7 +23,9 @@ def test_init_base(migrator: Migrator, ch_client: Client):
     with pytest.raises(ServerException):
         ch_client.execute("CHECK TABLE db_migrations")
 
+    assert not os.path.exists("./db/schema.sql")
     assert not os.path.exists(DEFATULT_MIGRATIONS_DIR)
+
     migrator.init()
     assert ch_client.execute("CHECK TABLE db_migrations")
     assert (
@@ -34,6 +36,7 @@ def test_init_base(migrator: Migrator, ch_client: Client):
     assert not ch_client.execute("SELECT * FROM db_migrations")
 
     assert os.path.exists(DEFATULT_MIGRATIONS_DIR)
+    assert os.path.exists("./db/schema.sql")
 
     # clean
     shutil.rmtree("./db")
@@ -205,5 +208,29 @@ def test_delete_migration(migrator: Migrator, ch_client: Client, migrator_init):
     assert not ch_client.execute("SELECT * FROM db_migrations")
 
 
-# def test_save_current_schema():
-#     pass
+def test_save_current_schema(migrator: Migrator, ch_client: Client):
+    assert not os.path.exists("./db/schema.sql")
+
+    migrator.init()
+
+    assert os.path.exists("./db/schema.sql")
+    with open("./db/schema.sql", "r") as f:
+        assert (
+            f.read()
+            == """---- Database schema ----
+
+CREATE TABLE IF NOT EXISTS test.db_migrations
+(
+    `name` String,
+    `up` String,
+    `rollback` String,
+    `dt` DateTime64(3) DEFAULT now()
+)
+ENGINE = MergeTree
+ORDER BY dt
+SETTINGS index_granularity = 8192;\n\n"""
+        )
+
+    # clean
+    shutil.rmtree("./db")
+    ch_client.execute("DROP TABLE IF EXISTS db_migrations")
