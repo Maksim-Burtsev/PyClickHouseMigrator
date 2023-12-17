@@ -120,9 +120,7 @@ class Migrator(object):
             self.ch_client.execute(query)
 
     def get_migrations_for_apply(self, number: int = None) -> list[Migration]:
-        filenames: list[str] = [file for file in os.listdir(self.migrations_dir) if file.endswith(".py")]
-        applied_migrations: list[str] = self.get_applied_migrations_names()
-        filenames: list[str] = sorted(list(set(filenames) - set(applied_migrations)))
+        filenames: list[str] = self.get_unapplied_migration_names()
 
         if number:
             filenames: list[str] = filenames[:number]
@@ -130,15 +128,24 @@ class Migrator(object):
         result = []
         for filename in filenames:
             module = SourceFileLoader(filename, f"{self.migrations_dir}/{filename}").load_module()
+            up: str = module.up()
+            if not up.strip():
+                print(f"Skip empty migration: {filename}")
+                continue
             result.append(
                 Migration(
                     name=filename,
-                    up=module.up(),
+                    up=up,
                     rollback=module.rollback(),
                 )
             )
 
         return result
+
+    def get_unapplied_migration_names(self) -> list[str]:
+        filenames: list[str] = [file for file in os.listdir(self.migrations_dir) if file.endswith(".py")]
+        applied_migrations: list[str] = self.get_applied_migrations_names()
+        return sorted(list(set(filenames) - set(applied_migrations)))
 
     def get_applied_migrations_names(self) -> list[str]:
         return [row[0] for row in self.ch_client.execute("SELECT name FROM db_migrations")]
@@ -154,19 +161,19 @@ class Migrator(object):
         # TODO assert len(result) == number?
 
     def get_new_migration_filename(self, name: str = "") -> str:
-        number: int = self.ch_client.execute("SELECT count() FROM db_migrations LIMIT 1")[0][0]
-        # TODO remove number from name
-        filename: str = f"{number}_{str(dt.datetime.now().strftime('%Y%m%d%H%S')).replace(' ', '_')}"
+        filename: str = f"{str(dt.datetime.now().strftime('%Y%m%d%H%S')).replace(' ', '_')}"
         if name:
             filename += f"_{name}"
         filename += ".py"
         return filename
 
-    def create_new_migration(self, name: str = "") -> None:
-        filename: str = f"{self.migrations_dir}/{self.get_new_migration_filename(name)}"
-        with open(filename, "w") as f:
+    def create_new_migration(self, name: str = "") -> str:
+        filepath: str = f"{self.migrations_dir}/{self.get_new_migration_filename(name)}"
+        with open(filepath, "w") as f:
             f.write(MIGRATION_TEMPLATE)
-        print(f"Migration {filename} has been created.")
+        print(f"Migration {filepath} has been created.")
+
+        return filepath
 
     def save_current_schema(self) -> None:
         tables: list[tuple[str]] = self.ch_client.execute("SHOW TABLES")
@@ -177,7 +184,7 @@ class Migrator(object):
         result = result.replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS")
         schema_path: str = f"{self.migrations_dir.rsplit('/', 1)[0]}/schema.sql"
         with open(schema_path, "w") as f:
-            f.write(result)
+            f.write(result[:-2])
         print(f"\nWriting schema {schema_path}")
 
     def save_applied_migration(self, name: str, up: SQL, rollback: SQL) -> None:
@@ -186,4 +193,11 @@ class Migrator(object):
     def delete_migration(self, name: str) -> None:
         self.ch_client.execute(f"DELETE FROM db_migrations WHERE name='{name}'")
 
-    # TODO show applied migrations history
+    def show_migrations(self) -> None:
+        applied_migration_names: list[str] = list(map(lambda x: f"[✔] {x}", self.get_applied_migrations_names()))
+        unapplied_migration_names: list[str] = list(map(lambda x: f"[ ] {x}", self.get_unapplied_migration_names()))
+        print(
+            "\n".join(applied_migration_names + unapplied_migration_names)
+            + f"\n\nApplied: {len(applied_migration_names)}"
+            f"\nPending: {len(unapplied_migration_names)}"
+        )

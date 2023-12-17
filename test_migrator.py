@@ -93,7 +93,6 @@ def test_create_new_migration(migrator: Migrator, ch_client: Client, migrator_in
     assert len(migration_filenames) == 1
 
     filename: str = migration_filenames[0]
-    assert filename.startswith("0")
     assert "_first_migration.py" in filename
 
 
@@ -141,8 +140,11 @@ def test_apply_migration_multiquery(migrator: Migrator, ch_client: Client):
     ch_client.execute("DROP TABLE IF EXISTS test_table_str_id")
 
 
-# def test_get_migrations_for_apply():
-#     pass
+def test_get_migrations_for_apply_empty(migrator: Migrator, migrator_init):
+    filepath: str = migrator.create_new_migration(name="test")
+    assert os.path.exists(filepath)
+
+    assert not migrator.get_migrations_for_apply()
 
 
 # def test_get_migrations_for_apply_with_number():
@@ -189,8 +191,24 @@ def test_apply_migration_multiquery(migrator: Migrator, ch_client: Client):
 #     pass
 
 
-# def test_save_applied_migration():
-#     pass
+def test_save_applied_migration(migrator: Migrator, ch_client: Client, migrator_init):
+    assert not ch_client.execute("SELECT * FROM db_migrations")
+
+    migrator.save_applied_migration(
+        name="test",
+        up="CREATE TABLE IF NOT EXISTS test_table (id Integer) Engine=MergeTree() ORDER BY id;",
+        rollback="DROP TABLE IF EXISTS test_table;",
+    )
+
+    assert ch_client.execute("SELECT count() FROM db_migrations")[0][0] == 1
+    row = ch_client.execute("SELECT name, up, rollback FROM db_migrations LIMIT 1")[0]
+
+    assert row[0] == "test"
+    assert row[1] == "CREATE TABLE IF NOT EXISTS test_table (id Integer) Engine=MergeTree() ORDER BY id;"
+    assert row[2] == "DROP TABLE IF EXISTS test_table;"
+
+    # clean
+    ch_client.execute("DELETE FROM db_migrations WHERE name='test'")
 
 
 def test_delete_migration(migrator: Migrator, ch_client: Client, migrator_init):
@@ -228,7 +246,7 @@ CREATE TABLE IF NOT EXISTS test.db_migrations
 )
 ENGINE = MergeTree
 ORDER BY dt
-SETTINGS index_granularity = 8192;\n\n"""
+SETTINGS index_granularity = 8192;"""
         )
 
     # clean
