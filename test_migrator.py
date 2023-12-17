@@ -5,7 +5,35 @@ import pytest
 from clickhouse_driver import Client
 from clickhouse_driver.errors import ServerException
 
-from py_clickhouse_migrate.migrator import DEFATULT_MIGRATIONS_DIR, ClickHouseServerIsNotHealthyError, Migrator
+from py_clickhouse_migrate.migrator import (
+    DEFATULT_MIGRATIONS_DIR,
+    ClickHouseServerIsNotHealthyError,
+    Migration,
+    Migrator,
+)
+
+TEST_MIGRATION_TEMPLATE: str = '''
+def up() -> str:
+    return """{up}"""
+
+
+def rollback() -> str:
+    return """{rollback}"""
+'''
+
+
+def create_test_migration(
+    name: str,
+    up: str,
+    rollback: str,
+    migrator: Migrator = Migrator(),
+) -> str:
+    filename: str = migrator.get_new_migration_filename(name)
+    filepath: str = f"{DEFATULT_MIGRATIONS_DIR}/{filename}"
+    with open(filepath, "w") as f:
+        f.write(TEST_MIGRATION_TEMPLATE.format(up=up, rollback=rollback))
+
+    return filename
 
 
 @pytest.fixture(scope="function")
@@ -147,8 +175,64 @@ def test_get_migrations_for_apply_empty(migrator: Migrator, migrator_init):
     assert not migrator.get_migrations_for_apply()
 
 
-# def test_get_migrations_for_apply_with_number():
-#     pass
+def test_get_all_migrations_for_apply(migrator: Migrator, migrator_init):
+    migration_1: str = create_test_migration(
+        name="test_1",
+        up="CREATE TABLE IF NOT EXISTS test_table_1 (id Integer) Engine=MergeTree() ORDER BY id;",
+        rollback="DROP TABLE IF EXISTS test_table_1",
+    )
+    migration_2: str = create_test_migration(
+        name="test_2",
+        up="CREATE TABLE IF NOT EXISTS test_table_2 (id String) Engine=MergeTree() ORDER BY id;",
+        rollback="DROP TABLE IF EXISTS test_table_2",
+    )
+
+    migrations: list[Migration] = migrator.get_migrations_for_apply()
+    assert len(migrations) == 2
+
+    assert migrations[0].name == migration_1
+    assert migrations[1].name == migration_2
+
+    assert migrations[0].up == "CREATE TABLE IF NOT EXISTS test_table_1 (id Integer) Engine=MergeTree() ORDER BY id;"
+    assert migrations[1].up == "CREATE TABLE IF NOT EXISTS test_table_2 (id String) Engine=MergeTree() ORDER BY id;"
+
+    assert migrations[0].rollback == "DROP TABLE IF EXISTS test_table_1"
+    assert migrations[1].rollback == "DROP TABLE IF EXISTS test_table_2"
+
+
+def test_get_few_migrations_for_apply_with_number(migrator: Migrator, migrator_init, ch_client: Client):
+    migration_1: str = create_test_migration(
+        name="test_1",
+        up="CREATE TABLE IF NOT EXISTS test_table_1 (id Integer) Engine=MergeTree() ORDER BY id;",
+        rollback="DROP TABLE IF EXISTS test_table_1",
+    )
+    migration_2: str = create_test_migration(
+        name="test_2",
+        up="CREATE TABLE IF NOT EXISTS test_table_2 (id String) Engine=MergeTree() ORDER BY id;",
+        rollback="DROP TABLE IF EXISTS test_table_2",
+    )
+    migration_3: str = create_test_migration(
+        name="test_3",
+        up="CREATE TABLE IF NOT EXISTS test_table_3 (id String) Engine=MergeTree() ORDER BY id;",
+        rollback="DROP TABLE IF EXISTS test_table_3",
+    )
+
+    migrations: list[Migration] = migrator.get_migrations_for_apply(number=2)
+    assert len(migrations) == 2
+
+    assert migrations[0].name == migration_1
+    assert migrations[1].name == migration_2
+
+    assert migrations[0].up == "CREATE TABLE IF NOT EXISTS test_table_1 (id Integer) Engine=MergeTree() ORDER BY id;"
+    assert migrations[1].up == "CREATE TABLE IF NOT EXISTS test_table_2 (id String) Engine=MergeTree() ORDER BY id;"
+
+    assert migrations[0].rollback == "DROP TABLE IF EXISTS test_table_1"
+    assert migrations[1].rollback == "DROP TABLE IF EXISTS test_table_2"
+
+    assert os.path.exists(f"{DEFATULT_MIGRATIONS_DIR}/{migration_3}")
+    assert not ch_client.execute("SELECT * FROM db_migrations WHERE name='test_table_3'")
+
+    assert len(migrator.get_migrations_for_apply()) == 3  # get migrations for apply without number
 
 
 # def test_get_migrations_for_rollback():
