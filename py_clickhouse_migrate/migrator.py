@@ -43,13 +43,15 @@ class Migrator(object):
     def __init__(
         self,
         database_url: str = "",
-        migrations_dir: str = os.getenv("CLICKHOUSE_MIGRATE_DIR", DEFATULT_MIGRATIONS_DIR),
+        migrations_dir: str = "",
     ) -> None:
-        if not database_url:
-            raise MissingDatabaseUrlError("ClickHouse url didn't passed.\n.env variable 'DATABASE_URL' is missing.")
-        self.database_url: str = database_url
+        self.database_url: str = database_url or os.getenv("DATABASE_URL")
+        if not self.database_url:
+            raise MissingDatabaseUrlError(
+                "ClickHouse url didn't passed.\n.env variable 'DATABASE_URL' or param --url is missing."
+            )
+        self.migrations_dir: str = migrations_dir or os.getenv("CLICKHOUSE_MIGRATE_DIR", DEFATULT_MIGRATIONS_DIR)
         self.ch_client: Client = Client.from_url(database_url)
-        self.migrations_dir: str = migrations_dir
         self.health_check()
 
     def init(self) -> None:
@@ -199,8 +201,10 @@ class Migrator(object):
         self.ch_client.execute(f"DELETE FROM db_migrations WHERE name='{name}'")
 
     def show_migrations(self) -> None:
-        applied_migration_names: list[str] = list(map(lambda x: f"[✔] {x}", self.get_applied_migrations_names()))
-        unapplied_migration_names: list[str] = list(map(lambda x: f"[ ] {x}", self.get_unapplied_migration_names()))
+        applied_migration_names = list(map(lambda x: f"[✔] {x}", self.get_applied_migrations_names()))[::-1]
+        if applied_migration_names:
+            applied_migration_names[0] += " (HEAD)"
+        unapplied_migration_names = list(map(lambda x: f"[ ] {x}", self.get_unapplied_migration_names()))[::-1]
         print(
             "\n".join(applied_migration_names + unapplied_migration_names)
             + f"\n\nApplied: {len(applied_migration_names)}"
