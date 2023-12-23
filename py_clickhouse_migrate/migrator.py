@@ -24,6 +24,10 @@ class ClickHouseServerIsNotHealthyError(Exception):
     ...
 
 
+class MigrationDirectoryNotFoundError(Exception):
+    ...
+
+
 class InvalidMigrationError(Exception):
     ...
 
@@ -39,6 +43,7 @@ class Migration:
     rollback: SQL
 
 
+# TODO assertion of existing table
 class Migrator(object):
     def __init__(
         self,
@@ -176,8 +181,13 @@ class Migrator(object):
 
     def create_new_migration(self, name: str = "") -> str:
         filepath: str = f"{self.migrations_dir}/{self.get_new_migration_filename(name)}"
-        with open(filepath, "w") as f:
-            f.write(MIGRATION_TEMPLATE)
+        try:
+            with open(filepath, "w") as f:
+                f.write(MIGRATION_TEMPLATE)
+        except FileNotFoundError as exc:
+            raise MigrationDirectoryNotFoundError(
+                f"Migration directory {self.migrations_dir} not found.\nMake sure you 'init' it."
+            ) from exc  # TODO test
         print(f"Migration {filepath} has been created.")
 
         return filepath

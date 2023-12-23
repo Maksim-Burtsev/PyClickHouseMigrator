@@ -31,12 +31,12 @@ def up(ctx: click.Context, number: int):
 @click.argument(
     "number",
     type=int,
-    default=None,
+    default=1,
     required=False,
 )
 @click.pass_context
 def rollback(ctx: click.Context, number: int):
-    Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"]).rollback(n=number)
+    Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"]).rollback(number=number)
 
 
 @click.command()
