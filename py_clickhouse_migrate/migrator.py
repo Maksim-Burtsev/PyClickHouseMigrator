@@ -4,14 +4,31 @@ from dataclasses import dataclass
 from importlib.machinery import SourceFileLoader
 
 from clickhouse_driver import Client
+from clickhouse_driver.errors import ServerException
 
 SQL = str
 
-DEFAULT_DATABASE_URL: str = "clickhouse://default@127.0.0.1:9000/default"
+
+MIGRATION_TEMPLATE: str = '''
+def up() -> str:
+    return """ """
+
+
+def rollback() -> str:
+    return """ """
+'''
 DEFATULT_MIGRATIONS_DIR: str = "./db/migrations"
 
 
 class ClickHouseServerIsNotHealthyError(Exception):
+    ...
+
+
+class InvalidMigrationError(Exception):
+    ...
+
+
+class MissingDatabaseUrlError(Exception):
     ...
 
 
@@ -22,29 +39,14 @@ class Migration:
     rollback: SQL
 
 
-@dataclass
-class Settings:
-    MIGRATIONS_DIR: str = os.getenv("CLICKHOUSE_MIGRATE_DIR", DEFATULT_MIGRATIONS_DIR)
-    DATABASE_URL: str = os.getenv("CLICKHOUSE_MIGRATE_URL", DEFAULT_DATABASE_URL)
-
-
-settings = Settings()
-MIGRATION_TEMPLATE: str = '''
-def up() -> str:
-    return """ """
-
-
-def rollback() -> str:
-    return """ """
-'''
-
-
 class Migrator(object):
     def __init__(
         self,
-        database_url: str = settings.DATABASE_URL,
-        migrations_dir: str = settings.MIGRATIONS_DIR,
+        database_url: str = "",
+        migrations_dir: str = os.getenv("CLICKHOUSE_MIGRATE_DIR", DEFATULT_MIGRATIONS_DIR),
     ) -> None:
+        if not database_url:
+            raise MissingDatabaseUrlError("ClickHouse url didn't passed.\n.env variable 'DATABASE_URL' is missing.")
         self.database_url: str = database_url
         self.ch_client: Client = Client.from_url(database_url)
         self.migrations_dir: str = migrations_dir
@@ -117,7 +119,10 @@ class Migrator(object):
         for query in queries:
             if not query:
                 continue
-            self.ch_client.execute(query)
+            try:
+                self.ch_client.execute(query)
+            except ServerException as exc:
+                raise InvalidMigrationError(f"Query {query} raise error: {exc}") from exc
 
     def get_migrations_for_apply(self, number: int = None) -> list[Migration]:
         filenames: list[str] = self.get_unapplied_migration_names()

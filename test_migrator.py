@@ -9,8 +9,10 @@ from clickhouse_driver.errors import ServerException
 from py_clickhouse_migrate.migrator import (
     DEFATULT_MIGRATIONS_DIR,
     ClickHouseServerIsNotHealthyError,
+    InvalidMigrationError,
     Migration,
     Migrator,
+    MissingDatabaseUrlError,
 )
 
 MIGRATION_FILENAME_REGEX = re.compile(r"^\d{8}\d{4}(?:_\w+)*\.py$")
@@ -29,7 +31,7 @@ def create_test_migration(
     name: str,
     up: str,
     rollback: str,
-    migrator: Migrator = Migrator(),
+    migrator: Migrator = Migrator(database_url="clickhouse://default@127.0.0.1:9000/default"),
 ) -> str:
     filename: str = migrator.get_new_migration_filename(name)
     filepath: str = f"{DEFATULT_MIGRATIONS_DIR}/{filename}"
@@ -167,7 +169,7 @@ def test_create_new_migration(migrator: Migrator, ch_client: Client, migrator_in
     assert "_first_migration.py" in filename
 
 
-def apply_migration_one_query(migrator: Migrator, ch_client: Client):
+def test_apply_migration_one_query(migrator: Migrator, ch_client: Client):
     with pytest.raises(ServerException):
         ch_client.execute("CHECK TABLE test_table")
 
@@ -531,3 +533,16 @@ SETTINGS index_granularity = 8192;"""
     # clean
     shutil.rmtree("./db")
     ch_client.execute("DROP TABLE IF EXISTS db_migrations")
+
+
+def test_apply_invalid_migration(migrator: Migrator, ch_client: Client):
+    with pytest.raises(ServerException):
+        ch_client.execute("CHECK TABLE test_table")
+
+    with pytest.raises(InvalidMigrationError):
+        migrator.apply_migration("ALTER TABLE test_table ADD COLUMN IF NOT EXISTS new_column Integer;")
+
+
+def test_missing_database_url_error():
+    with pytest.raises(MissingDatabaseUrlError):
+        _ = Migrator()
