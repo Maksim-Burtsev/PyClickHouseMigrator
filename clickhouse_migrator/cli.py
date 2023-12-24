@@ -85,6 +85,3 @@ main.add_command(new)
 main.add_command(up)
 main.add_command(rollback)
 main.add_command(show)
-
-if __name__ == "__main__":
-    main()
