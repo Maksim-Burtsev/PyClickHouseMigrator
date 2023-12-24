@@ -369,3 +369,4 @@ cython_debug/
 src/generate_token.py
 src/test_connection.py
 data/*.json
+.ruff_cache

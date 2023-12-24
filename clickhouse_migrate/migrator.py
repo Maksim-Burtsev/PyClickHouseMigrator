@@ -11,11 +11,13 @@ SQL = str
 
 MIGRATION_TEMPLATE: str = '''
 def up() -> str:
-    return """ """
+    return """
+    """
 
 
 def rollback() -> str:
-    return """ """
+    return """
+    """
 '''
 DEFATULT_MIGRATIONS_DIR: str = "./db/migrations"
 

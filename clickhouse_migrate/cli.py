@@ -35,7 +35,7 @@ def up(ctx: click.Context, number: int):
     required=False,
 )
 @click.pass_context
-def rollback(ctx: click.Context, number: int):
+def rollback(ctx: click.Context, number: int):  # TODO with <0
     Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"]).rollback(number=number)
 
 

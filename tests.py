@@ -6,7 +6,7 @@ import pytest
 from clickhouse_driver import Client
 from clickhouse_driver.errors import ServerException
 
-from py_clickhouse_migrate.migrator import (
+from clickhouse_migrate.migrator import (
     DEFATULT_MIGRATIONS_DIR,
     ClickHouseServerIsNotHealthyError,
     InvalidMigrationError,
