@@ -2,7 +2,7 @@ import pytest
 from clickhouse_driver import Client
 from testcontainers.clickhouse import ClickHouseContainer
 
-from clickhouse_migrator.migrator import Migrator
+from py_clickhouse_migrator.migrator import Migrator
 
 DB_URL = str
 

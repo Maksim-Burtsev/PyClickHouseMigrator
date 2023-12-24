@@ -2,7 +2,7 @@ import typing as t
 
 import click
 
-from clickhouse_migrator.migrator import Migrator
+from py_clickhouse_migrator import Migrator
 
 
 class ContextObj(t.TypedDict):
