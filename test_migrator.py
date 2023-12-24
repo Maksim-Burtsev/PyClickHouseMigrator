@@ -44,6 +44,7 @@ def create_test_migration(
 @pytest.fixture(scope="function")
 def migrator_init(migrator: Migrator, ch_client: Client):
     migrator.init()
+    assert ch_client.execute("CHECK TABLE db_migrations")
 
     yield
 
@@ -92,14 +93,12 @@ def test_tables_from_migration(migrator: Migrator, migrator_init: None, ch_clien
     ch_client.execute("DROP TABLE IF EXISTS test_table_3")
 
 
-def test_init_base(migrator: Migrator, ch_client: Client):
+def test_db_migrations_table_creation(ch_client: Client, test_db: str):
     with pytest.raises(ServerException):
         ch_client.execute("CHECK TABLE db_migrations")
 
-    assert not os.path.exists("./db/schema.sql")
-    assert not os.path.exists(DEFATULT_MIGRATIONS_DIR)
+    Migrator(database_url=test_db)
 
-    migrator.init()
     assert ch_client.execute("CHECK TABLE db_migrations")
     assert (
         ch_client.execute("SHOW CREATE TABLE db_migrations")[0][0]
@@ -107,6 +106,13 @@ def test_init_base(migrator: Migrator, ch_client: Client):
         " DateTime64(3) DEFAULT now()\n)\nENGINE = MergeTree\nORDER BY dt\nSETTINGS index_granularity = 8192"
     )
     assert not ch_client.execute("SELECT * FROM db_migrations")
+
+
+def test_init_base(migrator: Migrator, ch_client: Client):
+    assert not os.path.exists("./db/schema.sql")
+    assert not os.path.exists(DEFATULT_MIGRATIONS_DIR)
+
+    migrator.init()
 
     assert os.path.exists(DEFATULT_MIGRATIONS_DIR)
     assert os.path.exists("./db/schema.sql")
@@ -121,7 +127,7 @@ def test_init_with_database_creation(test_db: str, ch_client: Client):
         ch_client.execute("CHECK TABLE default.db_migrations")
 
     assert not os.path.exists(DEFATULT_MIGRATIONS_DIR)
-    default_db_url: str = test_db.rsplit("/", 1)[0] + "/default"
+    default_db_url: str = test_db.rsplit("/", 1)[0] + "/default"  # switch db from test to default
     migrator = Migrator(default_db_url)
     migrator.init()
     assert ch_client.execute("CHECK TABLE default.db_migrations")
@@ -143,11 +149,9 @@ def test_create_existend_migrations_directory(migrator: Migrator, ch_client: Cli
     with open(f"{DEFATULT_MIGRATIONS_DIR}/test_migration.sql", "w"):
         ...
     assert os.path.exists(DEFATULT_MIGRATIONS_DIR)
-    with pytest.raises(ServerException):
-        ch_client.execute("CHECK TABLE db_migrations")
 
     migrator.init()
-    assert ch_client.execute("CHECK TABLE db_migrations")
+
     assert os.path.exists(DEFATULT_MIGRATIONS_DIR)
     assert os.path.exists(f"{DEFATULT_MIGRATIONS_DIR}/test_migration.sql")
 
@@ -166,7 +170,7 @@ def test_create_new_migration(migrator: Migrator, ch_client: Client, migrator_in
     assert len(migration_filenames) == 1
 
     filename: str = migration_filenames[0]
-    assert "_first_migration.py" in filename
+    assert "_first_migration.py" in filename  # TODO check dt
 
 
 def test_apply_migration_one_query(migrator: Migrator, ch_client: Client):

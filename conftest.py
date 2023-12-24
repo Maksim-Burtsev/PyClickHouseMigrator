@@ -14,7 +14,7 @@ def test_db() -> DB_URL:
         yield db_url
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def migrator(test_db) -> Migrator:
     migrator = Migrator(test_db)
     yield migrator

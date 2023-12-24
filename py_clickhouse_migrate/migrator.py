@@ -58,12 +58,9 @@ class Migrator(object):
         self.migrations_dir: str = migrations_dir or os.getenv("CLICKHOUSE_MIGRATE_DIR", DEFATULT_MIGRATIONS_DIR)
         self.ch_client: Client = Client.from_url(database_url)
         self.health_check()
+        self.check_migrations_table()
 
-    def init(self) -> None:
-        self.create_migrations_directory()
-        db_name: str = self.get_db_name()
-        if db_name != "default":
-            self.ch_client.execute(f"CREATE DATABASE IF NOT EXISTS {db_name}")
+    def check_migrations_table(self) -> None:
         migrator_table: SQL = """
         CREATE TABLE IF NOT EXISTS db_migrations (
             name String,
@@ -75,6 +72,12 @@ class Migrator(object):
         ORDER BY dt
         """
         self.ch_client.execute(migrator_table)
+
+    def init(self) -> None:
+        db_name: str = self.get_db_name()
+        if db_name != "default":
+            self.ch_client.execute(f"CREATE DATABASE IF NOT EXISTS {db_name}")
+        self.create_migrations_directory()
         self.save_current_schema()
         print(f"Migrations directory {self.migrations_dir} sucessfully initialized.")
 
