@@ -1,7 +1,8 @@
 import typing as t
 
 import click
-from migrator import Migrator
+
+from clickhouse_migrator.migrator import Migrator
 
 
 class ContextObj(t.TypedDict):
