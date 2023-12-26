@@ -4,3 +4,7 @@ Change log
 0.1 (24/12/2023)
 ------------------
 - First release
+
+0.2 (26/12/2023)
+------------------
+- Second release (add .env loading)

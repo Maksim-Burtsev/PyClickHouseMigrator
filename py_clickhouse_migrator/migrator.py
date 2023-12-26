@@ -5,6 +5,9 @@ from importlib.machinery import SourceFileLoader
 
 from clickhouse_driver import Client
 from clickhouse_driver.errors import ServerException
+from dotenv import load_dotenv
+
+load_dotenv()
 
 SQL = str
 
@@ -45,7 +48,6 @@ class Migration:
     rollback: SQL
 
 
-# TODO assertion of existing table
 class Migrator(object):
     def __init__(
         self,
