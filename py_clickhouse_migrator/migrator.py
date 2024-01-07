@@ -131,6 +131,7 @@ class Migrator(object):
     def apply_migration(self, query: SQL) -> None:
         queries: list[SQL] = query.split(";")
         for query in queries:
+            query = query.strip("\n ")
             if not query:
                 continue
             try:
@@ -191,10 +192,10 @@ class Migrator(object):
         try:
             with open(filepath, "w") as f:
                 f.write(MIGRATION_TEMPLATE)
-        except FileNotFoundError as exc:
+        except FileNotFoundError:
             raise MigrationDirectoryNotFoundError(
                 f"Migration directory {self.migrations_dir} not found.\nMake sure you 'init' it."
-            ) from exc  # TODO test
+            ) from None
         print(f"Migration {filepath} has been created.")
 
         return filepath

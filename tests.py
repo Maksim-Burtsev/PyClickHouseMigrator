@@ -11,6 +11,7 @@ from py_clickhouse_migrator.migrator import (
     ClickHouseServerIsNotHealthyError,
     InvalidMigrationError,
     Migration,
+    MigrationDirectoryNotFoundError,
     Migrator,
     MissingDatabaseUrlError,
 )
@@ -31,7 +32,7 @@ def create_test_migration(
     name: str,
     up: str,
     rollback: str,
-    migrator: Migrator = Migrator(database_url="clickhouse://default@127.0.0.1:9000/default"),
+    migrator: Migrator,
 ) -> str:
     filename: str = migrator.get_new_migration_filename(name)
     filepath: str = f"{DEFATULT_MIGRATIONS_DIR}/{filename}"
@@ -59,6 +60,7 @@ def test_table_from_migration(migrator: Migrator, migrator_init: None, ch_client
         name="test_1",
         up="CREATE TABLE IF NOT EXISTS test_table (id Integer) Engine=MergeTree() ORDER BY id;",
         rollback="DROP TABLE IF EXISTS test_table",
+        migrator=migrator,
     )
     migrator.up()
 
@@ -73,16 +75,19 @@ def test_tables_from_migration(migrator: Migrator, migrator_init: None, ch_clien
         name="test_1",
         up="CREATE TABLE IF NOT EXISTS test_table_1 (id Integer) Engine=MergeTree() ORDER BY id;",
         rollback="DROP TABLE IF EXISTS test_table_2",
+        migrator=migrator,
     )
     filename_2: str = create_test_migration(
         name="test_2",
         up="CREATE TABLE IF NOT EXISTS test_table_2 (id String) Engine=MergeTree() ORDER BY id;",
         rollback="DROP TABLE IF EXISTS test_table_2",
+        migrator=migrator,
     )
     filename_3: str = create_test_migration(
         name="test_3",
         up="CREATE TABLE IF NOT EXISTS test_table_3 (id String) Engine=MergeTree() ORDER BY id;",
         rollback="DROP TABLE IF EXISTS test_table_3",
+        migrator=migrator,
     )
     migrator.up()
 
@@ -173,6 +178,11 @@ def test_create_new_migration(migrator: Migrator, ch_client: Client, migrator_in
     assert "_first_migration.py" in filename  # TODO check dt
 
 
+def test_create_new_migration_without_init(migrator: Migrator):
+    with pytest.raises(MigrationDirectoryNotFoundError):
+        migrator.create_new_migration(name="test")
+
+
 def test_apply_migration_one_query(migrator: Migrator, ch_client: Client):
     with pytest.raises(ServerException):
         ch_client.execute("CHECK TABLE test_table")
@@ -229,11 +239,13 @@ def test_get_all_migrations_for_apply(migrator: Migrator, migrator_init: None):
         name="test_1",
         up="CREATE TABLE IF NOT EXISTS test_table_1 (id Integer) Engine=MergeTree() ORDER BY id;",
         rollback="DROP TABLE IF EXISTS test_table_1",
+        migrator=migrator,
     )
     migration_2: str = create_test_migration(
         name="test_2",
         up="CREATE TABLE IF NOT EXISTS test_table_2 (id String) Engine=MergeTree() ORDER BY id;",
         rollback="DROP TABLE IF EXISTS test_table_2",
+        migrator=migrator,
     )
 
     migrations: list[Migration] = migrator.get_migrations_for_apply()
@@ -254,16 +266,19 @@ def test_get_few_migrations_for_apply_with_number(migrator: Migrator, migrator_i
         name="test_1",
         up="CREATE TABLE IF NOT EXISTS test_table_1 (id Integer) Engine=MergeTree() ORDER BY id;",
         rollback="DROP TABLE IF EXISTS test_table_1",
+        migrator=migrator,
     )
     migration_2: str = create_test_migration(
         name="test_2",
         up="CREATE TABLE IF NOT EXISTS test_table_2 (id String) Engine=MergeTree() ORDER BY id;",
         rollback="DROP TABLE IF EXISTS test_table_2",
+        migrator=migrator,
     )
     migration_3: str = create_test_migration(
         name="test_3",
         up="CREATE TABLE IF NOT EXISTS test_table_3 (id String) Engine=MergeTree() ORDER BY id;",
         rollback="DROP TABLE IF EXISTS test_table_3",
+        migrator=migrator,
     )
 
     migrations: list[Migration] = migrator.get_migrations_for_apply(number=2)
@@ -340,6 +355,7 @@ def test_up_one_query(migrator: Migrator, migrator_init: None, ch_client: Client
         name="test",
         up="CREATE TABLE IF NOT EXISTS test_table (id Integer) Engine=MergeTree() ORDER BY id;",
         rollback="DROP TABLE IF EXISTS test_table",
+        migrator=migrator,
     )
     assert os.path.exists(f"{DEFATULT_MIGRATIONS_DIR}/{filename}")
     assert ch_client.execute(f"SELECT count() FROM db_migrations WHERE name='{filename}'")[0][0] == 0
@@ -365,8 +381,37 @@ def test_up_multiquery(migrator: Migrator, migrator_init, ch_client: Client):
         up="CREATE TABLE IF NOT EXISTS test_table_1 (id Integer) Engine=MergeTree() ORDER BY id;"
         "CREATE TABLE IF NOT EXISTS test_table_2 (id String) Engine=MergeTree() ORDER BY id;",
         rollback="DROP TABLE IF EXISTS test_table_1;DROP TABLE IF EXISTS test_table_2",
+        migrator=migrator,
     )
     assert os.path.exists(f"{DEFATULT_MIGRATIONS_DIR}/{filename}")
+    assert ch_client.execute(f"SELECT count() FROM db_migrations WHERE name='{filename}'")[0][0] == 0
+
+    migrator.up()
+    assert ch_client.execute(f"SELECT count() FROM db_migrations WHERE name='{filename}'")[0][0] == 1
+    assert ch_client.execute("CHECK TABLE test_table_1")
+    assert ch_client.execute("CHECK TABLE test_table_2")
+    assert ch_client.execute("DESCRIBE TABLE test_table_1")[0][:2] == ("id", "Int32")
+    assert ch_client.execute("DESCRIBE TABLE test_table_2")[0][:2] == ("id", "String")
+
+    # clean
+    ch_client.execute("DROP TABLE IF EXISTS test_table_1")
+    ch_client.execute("DROP TABLE IF EXISTS test_table_2")
+
+
+def test_up_multiquery_with_line_breakes(migrator: Migrator, migrator_init, ch_client: Client):
+    with pytest.raises(ServerException):
+        assert not ch_client.execute("CHECK TABLE test_table_1")
+
+    with pytest.raises(ServerException):
+        assert not ch_client.execute("CHECK TABLE test_table_2")
+
+    filename: str = create_test_migration(
+        name="test_multiquery",
+        up="CREATE TABLE IF NOT EXISTS test_table_1 (id Integer) Engine=MergeTree() ORDER BY id;\n\n"
+        "CREATE TABLE IF NOT EXISTS test_table_2 (id String) Engine=MergeTree() ORDER BY id;   \n\n",
+        rollback="DROP TABLE IF EXISTS test_table_1;DROP TABLE IF EXISTS test_table_2 \n\n\n",
+        migrator=migrator,
+    )
     assert ch_client.execute(f"SELECT count() FROM db_migrations WHERE name='{filename}'")[0][0] == 0
 
     migrator.up()
@@ -392,11 +437,13 @@ def test_up_multiply_files(migrator: Migrator, migrator_init, ch_client: Client)
         name="test_1",
         up="CREATE TABLE IF NOT EXISTS test_table_1 (id Integer) Engine=MergeTree() ORDER BY id;",
         rollback="DROP TABLE IF EXISTS test_table_2",
+        migrator=migrator,
     )
     filename_2: str = create_test_migration(
         name="test_2",
         up="CREATE TABLE IF NOT EXISTS test_table_2 (id String) Engine=MergeTree() ORDER BY id;",
         rollback="DROP TABLE IF EXISTS test_table_2",
+        migrator=migrator,
     )
 
     assert os.path.exists(f"{DEFATULT_MIGRATIONS_DIR}/{filename_1}")
@@ -457,6 +504,7 @@ def test_rollback_multiquery_migration(migrator: Migrator, test_table_from_migra
         name="test_multiquery",
         up="CREATE TABLE IF NOT EXISTS test_table_1 (id Integer) Engine=MergeTree() ORDER BY id;",
         rollback="DROP TABLE IF EXISTS test_table_1; INSERT INTO test_table(id) VALUES (1),(2),(3);",
+        migrator=migrator,
     )
     migrator.up()
     assert os.path.exists(f"{DEFATULT_MIGRATIONS_DIR}/{filename}")
