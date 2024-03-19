@@ -8,3 +8,7 @@ Change log
 0.2 (26/12/2023)
 ------------------
 - Second release (add .env loading)
+
+0.3 (19/03/2024)
+------------------
+- Third release (fix queries parsing)
