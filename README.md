@@ -85,8 +85,31 @@ Rollback `N` migrations (the next after the last applied):
 ➜  migrator --url=...  rollback N
 ```
 
-## Show command
+## View all migrations
+To see all migrations (including unapplied) you can use `show` command.
+
+```sh
+➜  migrator --url=...  show
+
+[✔] 202404081721_drop_some_column.py (HEAD)
 ...
+[✔] 202401261452_new_column.py
+[✔] 202401151114_one_more_table.py
+[✔] 202401091440_new_table.py
+[✔] 202312261318_init.py
+
+Applied: 21
+Pending: 0
+```
+
+Here you can also see the last applied migration `(HEAD)`.
 
 ## Actual schema of database
-...
+Actual schema of database is always stored in the `schema.sql` in the folder where all your migrations are located. (by default its `/db`)
+```sh
+➜ tree db
+db
+├── migrations
+│   └── 202401080000_init.py
+└── schema.sql # here you can find CREATE TABLE for any table of current database
+```
