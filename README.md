@@ -60,10 +60,30 @@ db
 
 
 ## Apply new migration
-...
+To apply new migrations you need `up` command.
+
+Apply all new migrations:
+```sh
+➜  migrator --url=...  up
+```
+
+Apply `N` new migrations (the next after the last applied):
+```sh
+➜  migrator --url=...  up N
+```
 
 ## Rollback
-...
+To rollback migrations you need `rollback` command.
+
+Rollback last applied migration:
+```sh
+➜  migrator --url=...  rollback
+```
+
+Rollback `N` migrations (the next after the last applied):
+```sh
+➜  migrator --url=...  rollback N
+```
 
 ## Show command
 ...
