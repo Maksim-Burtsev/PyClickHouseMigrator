@@ -188,7 +188,7 @@ class Migrator(object):
         # TODO assert len(result) == number?
 
     def get_new_migration_filename(self, name: str = "") -> str:
-        filename: str = f"{str(dt.datetime.now().strftime('%Y%m%d%H%M%S')).replace(' ', '_')}"
+        filename: str = f"{str(dt.datetime.now().strftime('%Y%m%d%H%M%S%f')).replace(' ', '_')}"
         if name:
             filename += f"_{name}"
         filename += ".py"

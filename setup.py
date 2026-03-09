@@ -9,6 +9,7 @@ setup(
     author="Maksim Burtsev",
     author_email="zadrot-lol@list.ru",
     license="MIT",
+    python_requires=">=3.14",
     classifiers={"Operating System :: OS Independent"},
     packages=find_packages(),
     install_requires=[

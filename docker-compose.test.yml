@@ -1,0 +1,15 @@
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    ports:
+      - "19000:9000"
+      - "18123:8123"
+    environment:
+      CLICKHOUSE_DB: test
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      interval: 2s
+      timeout: 5s
+      retries: 10

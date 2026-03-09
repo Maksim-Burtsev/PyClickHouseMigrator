@@ -1,26 +1,25 @@
+from collections.abc import Generator
+
 import pytest
 from clickhouse_driver import Client
-from testcontainers.clickhouse import ClickHouseContainer
 
 from py_clickhouse_migrator.migrator import Migrator
 
-DB_URL = str
+DB_URL = "clickhouse://default@localhost:19000/test"
 
 
 @pytest.fixture(scope="session")
-def test_db() -> DB_URL:
-    with ClickHouseContainer() as ch:
-        db_url: str = ch.get_connection_url()
-        yield db_url
+def test_db() -> str:
+    return DB_URL
 
 
 @pytest.fixture(scope="function")
-def migrator(test_db) -> Migrator:
+def migrator(test_db) -> Generator[Migrator]:
     migrator = Migrator(test_db)
     yield migrator
 
 
 @pytest.fixture(scope="session")
-def ch_client(test_db) -> Client:
+def ch_client(test_db) -> Generator[Client]:
     client: Client = Client.from_url(test_db)
     yield client
