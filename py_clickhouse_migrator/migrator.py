@@ -1,13 +1,16 @@
 import datetime as dt
+import importlib.util
+import logging
 import os
 from dataclasses import dataclass
-from importlib.machinery import SourceFileLoader
 
 from clickhouse_driver import Client
 from clickhouse_driver.errors import ServerException
 from dotenv import load_dotenv
 
 load_dotenv()
+
+logger = logging.getLogger("py_clickhouse_migrator")
 
 SQL = str
 
@@ -22,7 +25,7 @@ def rollback() -> str:
     return """
     """
 '''
-DEFATULT_MIGRATIONS_DIR: str = "./db/migrations"
+DEFAULT_MIGRATIONS_DIR: str = "./db/migrations"
 
 
 class ClickHouseServerIsNotHealthyError(Exception):
@@ -57,9 +60,9 @@ class Migrator(object):
         self.database_url: str = database_url or os.getenv("DATABASE_URL")
         if not self.database_url:
             raise MissingDatabaseUrlError(
-                "ClickHouse url didn't passed.\n.env variable 'DATABASE_URL' or param --url is missing."
+                "ClickHouse url was not provided.\n.env variable 'DATABASE_URL' or param --url is missing."
             )
-        self.migrations_dir: str = migrations_dir or os.getenv("CLICKHOUSE_MIGRATE_DIR", DEFATULT_MIGRATIONS_DIR)
+        self.migrations_dir: str = migrations_dir or os.getenv("CLICKHOUSE_MIGRATE_DIR", DEFAULT_MIGRATIONS_DIR)
         self.ch_client: Client = Client.from_url(database_url)
         self.health_check()
         self.check_migrations_table()
@@ -83,13 +86,13 @@ class Migrator(object):
             self.ch_client.execute(f"CREATE DATABASE IF NOT EXISTS {db_name}")
         self.create_migrations_directory()
         self.save_current_schema()
-        print(f"Migrations directory {self.migrations_dir} sucessfully initialized.")
+        logger.info("Migrations directory %s successfully initialized.", self.migrations_dir)
 
     def health_check(self) -> None:
         try:
             self.ch_client.execute("SELECT 1")
         except Exception as exc:
-            raise ClickHouseServerIsNotHealthyError(f"ClickHouse server in not healthy: {exc}.") from exc
+            raise ClickHouseServerIsNotHealthyError(f"ClickHouse server is not healthy: {exc}.") from exc
 
     def get_db_name(self) -> str:
         db_name: str = self.database_url.rsplit("/", 1)[-1]
@@ -104,7 +107,7 @@ class Migrator(object):
     def up(self, n: int = None) -> None:
         migrations: list[Migration] = self.get_migrations_for_apply(n)
         if not migrations:
-            print("There is no migrations for apply.")
+            logger.info("There are no migrations to apply.")
         for migration in migrations:
             self.apply_migration(query=migration.up)
             self.save_applied_migration(
@@ -112,7 +115,7 @@ class Migrator(object):
                 up=migration.up,
                 rollback=migration.rollback,
             )
-            print(f"{migration.name} applied [✔]")
+            logger.info("%s applied [✔]", migration.name)
         self.save_current_schema()
 
     def rollback(self, number: int = 1) -> None:
@@ -125,7 +128,7 @@ class Migrator(object):
             self.delete_migration(
                 name=migration.name,
             )
-            print(f"{migration.name} rolled back [✔].")
+            logger.info("%s rolled back [✔].", migration.name)
         self.save_current_schema()
 
     def apply_migration(self, query: SQL) -> None:
@@ -147,10 +150,13 @@ class Migrator(object):
 
         result = []
         for filename in filenames:
-            module = SourceFileLoader(filename, f"{self.migrations_dir}/{filename}").load_module()
+            filepath = f"{self.migrations_dir}/{filename}"
+            spec = importlib.util.spec_from_file_location(filename, filepath)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
             up: str = module.up()
             if not up.strip():
-                print(f"Skip empty migration: {filename}")
+                logger.warning("Skip empty migration: %s", filename)
                 continue
             result.append(
                 Migration(
@@ -171,7 +177,8 @@ class Migrator(object):
         return [row[0] for row in self.ch_client.execute("SELECT name FROM db_migrations ORDER BY dt")]
 
     def get_migrations_for_rollback(self, number: int = 1) -> list[Migration]:
-        assert number > 0  # TODO move validation in separate method
+        if number <= 0:
+            raise ValueError(f"Rollback number must be positive, got {number}")
         return [
             Migration(name=row[0], up=row[1], rollback=row[2])
             for row in self.ch_client.execute(
@@ -181,7 +188,7 @@ class Migrator(object):
         # TODO assert len(result) == number?
 
     def get_new_migration_filename(self, name: str = "") -> str:
-        filename: str = f"{str(dt.datetime.now().strftime('%Y%m%d%H%S')).replace(' ', '_')}"
+        filename: str = f"{str(dt.datetime.now().strftime('%Y%m%d%H%M%S')).replace(' ', '_')}"
         if name:
             filename += f"_{name}"
         filename += ".py"
@@ -196,7 +203,7 @@ class Migrator(object):
             raise MigrationDirectoryNotFoundError(
                 f"Migration directory {self.migrations_dir} not found.\nMake sure you 'init' it."
             ) from None
-        print(f"Migration {filepath} has been created.")
+        logger.info("Migration %s has been created.", filepath)
 
         return filepath
 
@@ -210,20 +217,20 @@ class Migrator(object):
         schema_path: str = f"{self.migrations_dir.rsplit('/', 1)[0]}/schema.sql"
         with open(schema_path, "w") as f:
             f.write(result[:-2])
-        print(f"\nWriting schema {schema_path}")
+        logger.info("Writing schema %s", schema_path)
 
     def save_applied_migration(self, name: str, up: SQL, rollback: SQL) -> None:
         self.ch_client.execute("INSERT INTO db_migrations (name, up, rollback) VALUES", [[name, up, rollback]])
 
     def delete_migration(self, name: str) -> None:
-        self.ch_client.execute(f"DELETE FROM db_migrations WHERE name='{name}'")
+        self.ch_client.execute("DELETE FROM db_migrations WHERE name = %(name)s", {"name": name})
 
-    def show_migrations(self) -> None:
+    def show_migrations(self) -> str:
         applied_migration_names = list(map(lambda x: f"[✔] {x}", self.get_applied_migrations_names()))[::-1]
         if applied_migration_names:
             applied_migration_names[0] += " (HEAD)"
         unapplied_migration_names = list(map(lambda x: f"[ ] {x}", self.get_unapplied_migration_names()))[::-1]
-        print(
+        return (
             "\n".join(applied_migration_names + unapplied_migration_names)
             + f"\n\nApplied: {len(applied_migration_names)}"
             f"\nPending: {len(unapplied_migration_names)}"

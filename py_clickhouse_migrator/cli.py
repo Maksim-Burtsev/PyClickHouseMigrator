@@ -1,3 +1,4 @@
+import logging
 import typing as t
 
 import click
@@ -36,14 +37,15 @@ def up(ctx: click.Context, number: int):
     required=False,
 )
 @click.pass_context
-def rollback(ctx: click.Context, number: int):  # TODO with <0
+def rollback(ctx: click.Context, number: int):
     Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"]).rollback(number=number)
 
 
 @click.command()
 @click.pass_context
 def show(ctx: click.Context):
-    Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"]).show_migrations()
+    output = Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"]).show_migrations()
+    click.echo(output)
 
 
 @click.command()
@@ -73,8 +75,30 @@ def new(ctx: click.Context, name: str):
     default=None,
     required=False,
 )
+@click.option(
+    "--verbose",
+    "-v",
+    is_flag=True,
+    default=False,
+    help="Enable verbose (DEBUG) logging.",
+)
+@click.option(
+    "--quiet",
+    "-q",
+    is_flag=True,
+    default=False,
+    help="Suppress all output except errors.",
+)
 @click.pass_context
-def main(ctx: click.Context, url: str, path: str):
+def main(ctx: click.Context, url: str, path: str, verbose: bool, quiet: bool):
+    if verbose:
+        level = logging.DEBUG
+    elif quiet:
+        level = logging.ERROR
+    else:
+        level = logging.INFO
+    logging.basicConfig(level=level, format="%(message)s")
+
     ctx.obj = ContextObj(
         url=url,
         path=path,
