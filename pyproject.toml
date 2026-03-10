@@ -9,7 +9,15 @@ authors = [
     { name = "Maksim Burtsev", email = "zadrot-lol@list.ru" },
 ]
 classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Database",
 ]
 dependencies = [
     "click>=8.0.1",
@@ -36,7 +44,7 @@ build-backend = "hatchling.build"
 
 [tool.ruff]
 line-length = 120
-target-version = "py312"
+target-version = "py311"
 
 select = [
   "E",  # pycodestyle Error
