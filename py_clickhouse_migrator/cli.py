@@ -13,7 +13,7 @@ class ContextObj(t.TypedDict):
 
 @click.command()
 @click.pass_context
-def init(ctx: click.Context):
+def init(ctx: click.Context) -> None:
     Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"]).init()
 
 
@@ -25,7 +25,7 @@ def init(ctx: click.Context):
     required=False,
 )
 @click.pass_context
-def up(ctx: click.Context, number: int):
+def up(ctx: click.Context, number: int) -> None:
     Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"]).up(n=number)
 
 
@@ -37,14 +37,18 @@ def up(ctx: click.Context, number: int):
     required=False,
 )
 @click.pass_context
-def rollback(ctx: click.Context, number: int):
-    Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"]).rollback(number=number)
+def rollback(ctx: click.Context, number: int) -> None:
+    Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"]).rollback(
+        number=number
+    )
 
 
 @click.command()
 @click.pass_context
-def show(ctx: click.Context):
-    output = Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"]).show_migrations()
+def show(ctx: click.Context) -> None:
+    output = Migrator(
+        database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"]
+    ).show_migrations()
     click.echo(output)
 
 
@@ -56,8 +60,10 @@ def show(ctx: click.Context):
     default="",
     required=False,
 )
-def new(ctx: click.Context, name: str):
-    Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"]).create_new_migration(name=name)
+def new(ctx: click.Context, name: str) -> None:
+    Migrator(
+        database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"]
+    ).create_new_migration(name=name)
 
 
 @click.group()
@@ -90,7 +96,7 @@ def new(ctx: click.Context, name: str):
     help="Suppress all output except errors.",
 )
 @click.pass_context
-def main(ctx: click.Context, url: str, path: str, verbose: bool, quiet: bool):
+def main(ctx: click.Context, url: str, path: str, verbose: bool, quiet: bool) -> None:
     if verbose:
         level = logging.DEBUG
     elif quiet:

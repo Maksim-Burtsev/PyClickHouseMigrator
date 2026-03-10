@@ -27,6 +27,7 @@ dev = [
     "pytest-sugar>=1.0",
     "ruff>=0.15",
     "pre-commit>=4.0",
+    "mypy>=1.19.1",
 ]
 
 [build-system]
@@ -101,6 +102,11 @@ dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 
 [tool.ruff.format]
 line-ending = "auto"
+
+[tool.mypy]
+strict = true
+warn_return_any = true
+warn_unused_configs = true
 
 [tool.pytest.ini_options]
 testpaths = ["."]

@@ -1,1 +1,3 @@
-from .migrator import Migrator  # noqa
+from .migrator import Migrator
+
+__all__ = ["Migrator"]
