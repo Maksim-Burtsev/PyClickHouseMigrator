@@ -1,5 +1,9 @@
 # PyClickHouseMigrate
 
+[![CI](https://github.com/Maksim-Burtsev/PyClickHouseMigrator/actions/workflows/ci.yml/badge.svg)](https://github.com/Maksim-Burtsev/PyClickHouseMigrator/actions)
+[![PyPI](https://img.shields.io/pypi/v/py-clickhouse-migrator)](https://pypi.org/project/py-clickhouse-migrator/)
+[![Python](https://img.shields.io/pypi/pyversions/py-clickhouse-migrator)](https://pypi.org/project/py-clickhouse-migrator/)
+
 PyClickHouseMigrate is simple tool for manage your ClickHouse migrations.
 
 Inspired by [dbmate](https://github.com/amacneil/dbmate) and [aerich](https://github.com/tortoise/aerich).
