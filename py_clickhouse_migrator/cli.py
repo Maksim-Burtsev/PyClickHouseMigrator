@@ -38,17 +38,13 @@ def up(ctx: click.Context, number: int) -> None:
 )
 @click.pass_context
 def rollback(ctx: click.Context, number: int) -> None:
-    Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"]).rollback(
-        number=number
-    )
+    Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"]).rollback(number=number)
 
 
 @click.command()
 @click.pass_context
 def show(ctx: click.Context) -> None:
-    output = Migrator(
-        database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"]
-    ).show_migrations()
+    output = Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"]).show_migrations()
     click.echo(output)
 
 
@@ -61,9 +57,7 @@ def show(ctx: click.Context) -> None:
     required=False,
 )
 def new(ctx: click.Context, name: str) -> None:
-    Migrator(
-        database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"]
-    ).create_new_migration(name=name)
+    Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"]).create_new_migration(name=name)
 
 
 @click.group()
