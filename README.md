@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Maksim-Burtsev/PyClickHouseMigrator/actions/workflows/ci.yml/badge.svg)](https://github.com/Maksim-Burtsev/PyClickHouseMigrator/actions)
 [![PyPI](https://img.shields.io/pypi/v/py-clickhouse-migrator)](https://pypi.org/project/py-clickhouse-migrator/)
-[![Python](https://img.shields.io/pypi/pyversions/py-clickhouse-migrator)](https://pypi.org/project/py-clickhouse-migrator/)
+[![Python](https://img.shields.io/badge/python-3.11%20|%203.12%20|%203.13%20|%203.14-blue)](https://pypi.org/project/py-clickhouse-migrator/)
 
 PyClickHouseMigrate is simple tool for manage your ClickHouse migrations.
 
