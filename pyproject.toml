@@ -33,6 +33,7 @@ migrator = "py_clickhouse_migrator.cli:main"
 [dependency-groups]
 dev = [
     "pytest>=9.0",
+    "pytest-cov>=6.0",
     "pytest-sugar>=1.0",
     "ruff>=0.15",
     "pre-commit>=4.0",
