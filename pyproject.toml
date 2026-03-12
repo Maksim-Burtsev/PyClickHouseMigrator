@@ -102,6 +102,9 @@ warn_unused_configs = true
 module = "clickhouse_driver.*"
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = "tests.*"
+disable_error_code = ["untyped-decorator"]
+
 [tool.pytest.ini_options]
-testpaths = ["."]
-python_files = ["tests.py", "test_*.py"]
+testpaths = ["tests"]

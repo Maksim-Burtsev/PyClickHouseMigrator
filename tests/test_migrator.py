@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import os
 import re
 import shutil
+from collections.abc import Generator
 
 import pytest
 from clickhouse_driver import Client
@@ -32,7 +35,7 @@ def table_exists(ch_client: Client, table_name: str) -> bool:
         "SELECT count() FROM system.tables WHERE database = currentDatabase() AND name = %(name)s",
         {"name": table_name},
     )
-    return result[0][0] > 0
+    return bool(result[0][0] > 0)
 
 
 def create_test_migration(
@@ -49,14 +52,14 @@ def create_test_migration(
 
 
 @pytest.fixture(autouse=True)
-def clean_db_dir():
+def clean_db_dir() -> Generator[None]:
     yield
     if os.path.exists("./db"):
         shutil.rmtree("./db")
 
 
 @pytest.fixture(scope="function")
-def migrator_init(migrator: Migrator, ch_client: Client):
+def migrator_init(migrator: Migrator, ch_client: Client) -> Generator[None]:
     migrator.init()
     assert table_exists(ch_client, "db_migrations")
 
@@ -66,7 +69,7 @@ def migrator_init(migrator: Migrator, ch_client: Client):
 
 
 @pytest.fixture(scope="function")
-def test_table_from_migration(migrator: Migrator, migrator_init: None, ch_client: Client) -> str:
+def test_table_from_migration(migrator: Migrator, migrator_init: None, ch_client: Client) -> Generator[str]:
     filename: str = create_test_migration(
         name="test_1",
         up="CREATE TABLE IF NOT EXISTS test_table (id Integer) Engine=MergeTree() ORDER BY id;",
@@ -81,7 +84,7 @@ def test_table_from_migration(migrator: Migrator, migrator_init: None, ch_client
 
 
 @pytest.fixture(scope="function")
-def test_tables_from_migration(migrator: Migrator, migrator_init: None, ch_client: Client) -> list[str]:
+def test_tables_from_migration(migrator: Migrator, migrator_init: None, ch_client: Client) -> Generator[list[str]]:
     filename_1: str = create_test_migration(
         name="test_1",
         up="CREATE TABLE IF NOT EXISTS test_table_1 (id Integer) Engine=MergeTree() ORDER BY id;",
@@ -109,7 +112,7 @@ def test_tables_from_migration(migrator: Migrator, migrator_init: None, ch_clien
     ch_client.execute("DROP TABLE IF EXISTS test_table_3")
 
 
-def test_db_migrations_table_creation(ch_client: Client, test_db: str):
+def test_db_migrations_table_creation(ch_client: Client, test_db: str) -> None:
     ch_client.execute("DROP TABLE IF EXISTS db_migrations")
     assert not table_exists(ch_client, "db_migrations")
 
@@ -135,7 +138,7 @@ def test_db_migrations_table_creation(ch_client: Client, test_db: str):
     ch_client.execute("DROP TABLE IF EXISTS db_migrations")
 
 
-def test_init_base(migrator: Migrator, ch_client: Client):
+def test_init_base(migrator: Migrator, ch_client: Client) -> None:
     assert not os.path.exists("./db/schema.sql")
     assert not os.path.exists(DEFAULT_MIGRATIONS_DIR)
 
@@ -148,7 +151,7 @@ def test_init_base(migrator: Migrator, ch_client: Client):
     ch_client.execute("DROP TABLE IF EXISTS db_migrations")
 
 
-def test_init_with_database_creation(test_db: str, ch_client: Client):
+def test_init_with_database_creation(test_db: str, ch_client: Client) -> None:
     ch_client.execute("DROP TABLE IF EXISTS default.db_migrations")
     assert not table_exists(ch_client, "db_migrations") or True  # might exist from other tests
 
@@ -165,13 +168,13 @@ def test_init_with_database_creation(test_db: str, ch_client: Client):
     ch_client.execute("DROP TABLE IF EXISTS default.db_migrations")
 
 
-def test_init_with_invalid_database_url(test_db: str):
+def test_init_with_invalid_database_url(test_db: str) -> None:
     default_db_url: str = test_db.replace("localhost", "some_domain")
     with pytest.raises(ClickHouseServerIsNotHealthyError):
         Migrator(default_db_url)
 
 
-def test_create_existend_migrations_directory(migrator: Migrator, ch_client: Client):
+def test_create_existend_migrations_directory(migrator: Migrator, ch_client: Client) -> None:
     os.makedirs(DEFAULT_MIGRATIONS_DIR, exist_ok=True)
     with open(f"{DEFAULT_MIGRATIONS_DIR}/test_migration.sql", "w"):
         ...
@@ -186,7 +189,7 @@ def test_create_existend_migrations_directory(migrator: Migrator, ch_client: Cli
     ch_client.execute("DROP TABLE IF EXISTS db_migrations")
 
 
-def test_create_new_migration(migrator: Migrator, ch_client: Client, migrator_init: None):
+def test_create_new_migration(migrator: Migrator, ch_client: Client, migrator_init: None) -> None:
     assert not os.listdir(DEFAULT_MIGRATIONS_DIR)
     assert not ch_client.execute("SELECT count() FROM db_migrations")[0][0]
 
@@ -199,7 +202,7 @@ def test_create_new_migration(migrator: Migrator, ch_client: Client, migrator_in
     assert "_first_migration.py" in filename
 
 
-def test_create_new_migration_without_init(test_db: str):
+def test_create_new_migration_without_init(test_db: str) -> None:
     migrator = Migrator(test_db)
     shutil.rmtree("./db", ignore_errors=True)
     with pytest.raises(MigrationDirectoryNotFoundError):
@@ -208,7 +211,7 @@ def test_create_new_migration_without_init(test_db: str):
     migrator.ch_client.execute("DROP TABLE IF EXISTS db_migrations")
 
 
-def test_apply_migration_one_query(migrator: Migrator, ch_client: Client):
+def test_apply_migration_one_query(migrator: Migrator, ch_client: Client) -> None:
     ch_client.execute("DROP TABLE IF EXISTS test_table")
     assert not table_exists(ch_client, "test_table")
 
@@ -220,7 +223,7 @@ def test_apply_migration_one_query(migrator: Migrator, ch_client: Client):
     ch_client.execute("DROP TABLE IF EXISTS test_table")
 
 
-def test_apply_migration_multiquery(migrator: Migrator, ch_client: Client):
+def test_apply_migration_multiquery(migrator: Migrator, ch_client: Client) -> None:
     assert not table_exists(ch_client, "test_table_int_id")
     assert not table_exists(ch_client, "test_table_str_id")
 
@@ -249,14 +252,14 @@ def test_apply_migration_multiquery(migrator: Migrator, ch_client: Client):
     ch_client.execute("DROP TABLE IF EXISTS test_table_str_id")
 
 
-def test_get_migrations_for_apply_is_empty(migrator: Migrator, migrator_init: None):
+def test_get_migrations_for_apply_is_empty(migrator: Migrator, migrator_init: None) -> None:
     filepath: str = migrator.create_new_migration(name="test")
     assert os.path.exists(filepath)
 
     assert not migrator.get_migrations_for_apply()
 
 
-def test_get_all_migrations_for_apply(migrator: Migrator, migrator_init: None):
+def test_get_all_migrations_for_apply(migrator: Migrator, migrator_init: None) -> None:
     migration_1: str = create_test_migration(
         name="test_1",
         up="CREATE TABLE IF NOT EXISTS test_table_1 (id Integer) Engine=MergeTree() ORDER BY id;",
@@ -283,7 +286,7 @@ def test_get_all_migrations_for_apply(migrator: Migrator, migrator_init: None):
     assert migrations[1].rollback == "DROP TABLE IF EXISTS test_table_2"
 
 
-def test_get_few_migrations_for_apply_with_number(migrator: Migrator, migrator_init: None, ch_client: Client):
+def test_get_few_migrations_for_apply_with_number(migrator: Migrator, migrator_init: None, ch_client: Client) -> None:
     migration_1: str = create_test_migration(
         name="test_1",
         up="CREATE TABLE IF NOT EXISTS test_table_1 (id Integer) Engine=MergeTree() ORDER BY id;",
@@ -321,7 +324,9 @@ def test_get_few_migrations_for_apply_with_number(migrator: Migrator, migrator_i
     assert len(migrator.get_migrations_for_apply()) == 3  # get migrations for apply without number
 
 
-def test_get_migrations_for_rollback(migrator: Migrator, test_tables_from_migration: list[str], ch_client: Client):
+def test_get_migrations_for_rollback(
+    migrator: Migrator, test_tables_from_migration: list[str], ch_client: Client
+) -> None:
     assert ch_client.execute("SELECT count() from db_migrations")[0][0] == 3
 
     migrations: list[Migration] = migrator.get_migrations_for_rollback(number=2)
@@ -348,18 +353,20 @@ def test_get_migrations_for_rollback(migrator: Migrator, test_tables_from_migrat
     assert all_migrations_for_rollback[0].rollback == "DROP TABLE IF EXISTS test_table_3"
 
 
-def test_get_new_migration_filename(migrator: Migrator):
+def test_get_new_migration_filename(migrator: Migrator) -> None:
     filename: str = migrator.get_new_migration_filename()
     assert MIGRATION_FILENAME_REGEX.match(filename)
 
 
-def test_get_new_migration_filename_with_name(migrator: Migrator):
+def test_get_new_migration_filename_with_name(migrator: Migrator) -> None:
     filename: str = migrator.get_new_migration_filename("test_migration")
     assert "_test_migration.py" in filename
     assert MIGRATION_FILENAME_REGEX.match(filename)
 
 
-def test_get_applied_migrations_names(migrator: Migrator, test_tables_from_migration: list[str], ch_client: Client):
+def test_get_applied_migrations_names(
+    migrator: Migrator, test_tables_from_migration: list[str], ch_client: Client
+) -> None:
     migration_names: list[str] = migrator.get_applied_migrations_names()
     assert len(migration_names) == 3
 
@@ -369,7 +376,7 @@ def test_get_applied_migrations_names(migrator: Migrator, test_tables_from_migra
     assert migration_names == db_migration_names
 
 
-def test_up_one_query(migrator: Migrator, migrator_init: None, ch_client: Client):
+def test_up_one_query(migrator: Migrator, migrator_init: None, ch_client: Client) -> None:
     ch_client.execute("DROP TABLE IF EXISTS test_table")
     assert not table_exists(ch_client, "test_table")
 
@@ -391,7 +398,7 @@ def test_up_one_query(migrator: Migrator, migrator_init: None, ch_client: Client
     ch_client.execute("DROP TABLE IF EXISTS test_table")
 
 
-def test_up_multiquery(migrator: Migrator, migrator_init, ch_client: Client):
+def test_up_multiquery(migrator: Migrator, migrator_init: None, ch_client: Client) -> None:
     assert not table_exists(ch_client, "test_table_1")
     assert not table_exists(ch_client, "test_table_2")
 
@@ -417,7 +424,7 @@ def test_up_multiquery(migrator: Migrator, migrator_init, ch_client: Client):
     ch_client.execute("DROP TABLE IF EXISTS test_table_2")
 
 
-def test_up_multiquery_with_line_breakes(migrator: Migrator, migrator_init, ch_client: Client):
+def test_up_multiquery_with_line_breakes(migrator: Migrator, migrator_init: None, ch_client: Client) -> None:
     assert not table_exists(ch_client, "test_table_1")
     assert not table_exists(ch_client, "test_table_2")
 
@@ -442,7 +449,7 @@ def test_up_multiquery_with_line_breakes(migrator: Migrator, migrator_init, ch_c
     ch_client.execute("DROP TABLE IF EXISTS test_table_2")
 
 
-def test_up_multiply_files(migrator: Migrator, migrator_init, ch_client: Client):
+def test_up_multiply_files(migrator: Migrator, migrator_init: None, ch_client: Client) -> None:
     assert not table_exists(ch_client, "test_table_1")
     assert not table_exists(ch_client, "test_table_2")
 
@@ -477,7 +484,9 @@ def test_up_multiply_files(migrator: Migrator, migrator_init, ch_client: Client)
     ch_client.execute("DROP TABLE IF EXISTS test_table_2")
 
 
-def test_rollback_one_query_migration(migrator: Migrator, test_tables_from_migration, ch_client):
+def test_rollback_one_query_migration(
+    migrator: Migrator, test_tables_from_migration: list[str], ch_client: Client
+) -> None:
     assert ch_client.execute("SELECT count() FROM db_migrations")[0][0] == 3
     assert table_exists(ch_client, "test_table_3")
     assert sorted(migrator.get_applied_migrations_names()) == sorted(test_tables_from_migration)
@@ -492,7 +501,9 @@ def test_rollback_one_query_migration(migrator: Migrator, test_tables_from_migra
     assert not table_exists(ch_client, "test_table_3")
 
 
-def test_rollback_multiply_migrations(migrator: Migrator, test_tables_from_migration, ch_client):
+def test_rollback_multiply_migrations(
+    migrator: Migrator, test_tables_from_migration: list[str], ch_client: Client
+) -> None:
     assert ch_client.execute("SELECT count() FROM db_migrations")[0][0] == 3
     assert table_exists(ch_client, "test_table_3")
     assert table_exists(ch_client, "test_table_2")
@@ -508,7 +519,7 @@ def test_rollback_multiply_migrations(migrator: Migrator, test_tables_from_migra
     assert not table_exists(ch_client, "test_table_3")
 
 
-def test_rollback_multiquery_migration(migrator: Migrator, test_table_from_migration, ch_client):
+def test_rollback_multiquery_migration(migrator: Migrator, test_table_from_migration: str, ch_client: Client) -> None:
     assert table_exists(ch_client, "test_table")
     filename: str = create_test_migration(
         name="test_multiquery",
@@ -533,7 +544,7 @@ def test_rollback_multiquery_migration(migrator: Migrator, test_table_from_migra
     assert [row[0] for row in ch_client.execute("SELECT id FROM test_table")] == [1, 2, 3]
 
 
-def test_save_applied_migration(migrator: Migrator, ch_client: Client, migrator_init: None):
+def test_save_applied_migration(migrator: Migrator, ch_client: Client, migrator_init: None) -> None:
     assert not ch_client.execute("SELECT * FROM db_migrations")
 
     migrator.save_applied_migration(
@@ -553,7 +564,7 @@ def test_save_applied_migration(migrator: Migrator, ch_client: Client, migrator_
     ch_client.execute("DELETE FROM db_migrations WHERE name='test'")
 
 
-def test_delete_migration(migrator: Migrator, ch_client: Client, migrator_init: None):
+def test_delete_migration(migrator: Migrator, ch_client: Client, migrator_init: None) -> None:
     assert not ch_client.execute("SELECT * FROM db_migrations")
     ch_client.execute(
         "INSERT INTO db_migrations (name, up, rollback) VALUES "
@@ -568,7 +579,7 @@ def test_delete_migration(migrator: Migrator, ch_client: Client, migrator_init: 
     assert not ch_client.execute("SELECT * FROM db_migrations")
 
 
-def test_save_current_schema(migrator: Migrator, ch_client: Client):
+def test_save_current_schema(migrator: Migrator, ch_client: Client) -> None:
     assert not os.path.exists("./db/schema.sql")
 
     migrator.init()
@@ -595,13 +606,13 @@ SETTINGS index_granularity = 8192;"""
     ch_client.execute("DROP TABLE IF EXISTS db_migrations")
 
 
-def test_apply_invalid_migration(migrator: Migrator, ch_client: Client):
+def test_apply_invalid_migration(migrator: Migrator, ch_client: Client) -> None:
     assert not table_exists(ch_client, "test_table")
 
     with pytest.raises(InvalidMigrationError):
         migrator.apply_migration("ALTER TABLE test_table ADD COLUMN IF NOT EXISTS new_column Integer;")
 
 
-def test_missing_database_url_error():
+def test_missing_database_url_error() -> None:
     with pytest.raises(MissingDatabaseUrlError):
         _ = Migrator()

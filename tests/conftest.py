@@ -14,12 +14,12 @@ def test_db() -> str:
 
 
 @pytest.fixture(scope="function")
-def migrator(test_db) -> Generator[Migrator]:
+def migrator(test_db: str) -> Generator[Migrator]:
     migrator = Migrator(test_db)
     yield migrator
 
 
 @pytest.fixture(scope="session")
-def ch_client(test_db) -> Generator[Client]:
+def ch_client(test_db: str) -> Generator[Client]:
     client: Client = Client.from_url(test_db)
     yield client
