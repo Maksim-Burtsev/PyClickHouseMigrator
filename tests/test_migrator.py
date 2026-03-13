@@ -616,3 +616,77 @@ def test_apply_invalid_migration(migrator: Migrator, ch_client: Client) -> None:
 def test_missing_database_url_error() -> None:
     with pytest.raises(MissingDatabaseUrlError):
         _ = Migrator()
+
+
+def test_up_dry_run_does_not_apply(migrator: Migrator, migrator_init: None, ch_client: Client) -> None:
+    """dry_run=True should not create tables or save migrations to db_migrations."""
+    ch_client.execute("DROP TABLE IF EXISTS test_table")
+    assert not table_exists(ch_client, "test_table")
+
+    create_test_migration(
+        name="test_dry",
+        up="CREATE TABLE IF NOT EXISTS test_table (id Integer) Engine=MergeTree() ORDER BY id;",
+        rollback="DROP TABLE IF EXISTS test_table",
+        migrator=migrator,
+    )
+
+    migrator.up(dry_run=True)
+
+    assert not table_exists(ch_client, "test_table")
+    assert ch_client.execute("SELECT count() FROM db_migrations")[0][0] == 0
+
+    # migration should still be unapplied
+    assert len(migrator.get_unapplied_migration_names()) == 1
+
+
+def test_up_dry_run_with_number(migrator: Migrator, migrator_init: None, ch_client: Client) -> None:
+    """dry_run with number should show only N migrations without applying."""
+    create_test_migration(
+        name="test_1",
+        up="CREATE TABLE IF NOT EXISTS test_table_1 (id Integer) Engine=MergeTree() ORDER BY id;",
+        rollback="DROP TABLE IF EXISTS test_table_1",
+        migrator=migrator,
+    )
+    create_test_migration(
+        name="test_2",
+        up="CREATE TABLE IF NOT EXISTS test_table_2 (id Integer) Engine=MergeTree() ORDER BY id;",
+        rollback="DROP TABLE IF EXISTS test_table_2",
+        migrator=migrator,
+    )
+
+    migrator.up(n=1, dry_run=True)
+
+    assert not table_exists(ch_client, "test_table_1")
+    assert not table_exists(ch_client, "test_table_2")
+    assert ch_client.execute("SELECT count() FROM db_migrations")[0][0] == 0
+    assert len(migrator.get_unapplied_migration_names()) == 2
+
+
+def test_rollback_dry_run_does_not_rollback(
+    migrator: Migrator, test_table_from_migration: str, ch_client: Client
+) -> None:
+    """dry_run=True should not drop tables or delete from db_migrations."""
+    assert table_exists(ch_client, "test_table")
+    assert ch_client.execute("SELECT count() FROM db_migrations")[0][0] == 1
+
+    migrator.rollback(dry_run=True)
+
+    assert table_exists(ch_client, "test_table")
+    assert ch_client.execute("SELECT count() FROM db_migrations")[0][0] == 1
+
+
+def test_rollback_dry_run_multiple(
+    migrator: Migrator, test_tables_from_migration: list[str], ch_client: Client
+) -> None:
+    """dry_run rollback of multiple migrations should leave everything intact."""
+    assert ch_client.execute("SELECT count() FROM db_migrations")[0][0] == 3
+    assert table_exists(ch_client, "test_table_1")
+    assert table_exists(ch_client, "test_table_2")
+    assert table_exists(ch_client, "test_table_3")
+
+    migrator.rollback(number=2, dry_run=True)
+
+    assert ch_client.execute("SELECT count() FROM db_migrations")[0][0] == 3
+    assert table_exists(ch_client, "test_table_1")
+    assert table_exists(ch_client, "test_table_2")
+    assert table_exists(ch_client, "test_table_3")

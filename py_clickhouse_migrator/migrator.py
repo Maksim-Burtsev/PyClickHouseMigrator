@@ -100,11 +100,15 @@ class Migrator(object):
         if not os.path.exists(self.migrations_dir):
             os.makedirs(self.migrations_dir)
 
-    def up(self, n: int | None = None) -> None:
+    def up(self, n: int | None = None, dry_run: bool = False) -> None:
         migrations: list[Migration] = self.get_migrations_for_apply(n)
         if not migrations:
             logger.info("There are no migrations to apply.")
         for migration in migrations:
+            if dry_run:
+                logger.info("-- %s (up)", migration.name)
+                logger.info("%s\n", migration.up.strip())
+                continue
             self.apply_migration(query=migration.up)
             self.save_applied_migration(
                 name=migration.name,
@@ -112,11 +116,16 @@ class Migrator(object):
                 rollback=migration.rollback,
             )
             logger.info("%s applied [✔]", migration.name)
-        self.save_current_schema()
+        if not dry_run:
+            self.save_current_schema()
 
-    def rollback(self, number: int = 1) -> None:
+    def rollback(self, number: int = 1, dry_run: bool = False) -> None:
         migrations: list[Migration] = self.get_migrations_for_rollback(number=number)
         for migration in migrations:
+            if dry_run:
+                logger.info("-- %s (rollback)", migration.name)
+                logger.info("%s\n", migration.rollback.strip())
+                continue
             # TODO open transaction by with flag (for enabled setting)
             self.apply_migration(
                 query=migration.rollback,
@@ -125,7 +134,8 @@ class Migrator(object):
                 name=migration.name,
             )
             logger.info("%s rolled back [✔].", migration.name)
-        self.save_current_schema()
+        if not dry_run:
+            self.save_current_schema()
 
     def apply_migration(self, query: SQL) -> None:
         queries: list[SQL] = query.split(";")

@@ -30,9 +30,13 @@ def init(ctx: click.Context) -> None:
 @click.option("--lock/--no-lock", default=True, help="Enable/disable migration lock.")
 @click.option("--lock-ttl", type=int, default=300, help="Lock TTL in seconds.")
 @click.option("--lock-retry", type=int, default=3, help="Number of lock acquire retries.")
+@click.option("--dry-run", is_flag=True, default=False, help="Show SQL without executing.")
 @click.pass_context
-def up(ctx: click.Context, number: int, lock: bool, lock_ttl: int, lock_retry: int) -> None:
+def up(ctx: click.Context, number: int, lock: bool, lock_ttl: int, lock_retry: int, dry_run: bool) -> None:
     migrator = Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"])
+    if dry_run:
+        migrator.up(n=number, dry_run=True)
+        return
     if lock:
         if not migrator.get_unapplied_migration_names():
             logger.info("No pending migrations, skipping lock.")
@@ -53,9 +57,13 @@ def up(ctx: click.Context, number: int, lock: bool, lock_ttl: int, lock_retry: i
 @click.option("--lock/--no-lock", default=True, help="Enable/disable migration lock.")
 @click.option("--lock-ttl", type=int, default=300, help="Lock TTL in seconds.")
 @click.option("--lock-retry", type=int, default=3, help="Number of lock acquire retries.")
+@click.option("--dry-run", is_flag=True, default=False, help="Show SQL without executing.")
 @click.pass_context
-def rollback(ctx: click.Context, number: int, lock: bool, lock_ttl: int, lock_retry: int) -> None:
+def rollback(ctx: click.Context, number: int, lock: bool, lock_ttl: int, lock_retry: int, dry_run: bool) -> None:
     migrator = Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"])
+    if dry_run:
+        migrator.rollback(number=number, dry_run=True)
+        return
     if lock:
         with MigrationLock(client=migrator.ch_client, db=migrator.get_db_name(), ttl=lock_ttl, retry_count=lock_retry):
             migrator.rollback(number=number)
