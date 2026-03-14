@@ -31,20 +31,29 @@ def init(ctx: click.Context) -> None:
 @click.option("--lock-ttl", type=int, default=300, help="Lock TTL in seconds.")
 @click.option("--lock-retry", type=int, default=3, help="Number of lock acquire retries.")
 @click.option("--dry-run", is_flag=True, default=False, help="Show SQL without executing.")
+@click.option("--allow-dirty", is_flag=True, default=False, help="Skip checksum validation.")
 @click.pass_context
-def up(ctx: click.Context, number: int, lock: bool, lock_ttl: int, lock_retry: int, dry_run: bool) -> None:
+def up(
+    ctx: click.Context,
+    number: int,
+    lock: bool,
+    lock_ttl: int,
+    lock_retry: int,
+    dry_run: bool,
+    allow_dirty: bool,
+) -> None:
     migrator = Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"])
     if dry_run:
-        migrator.up(n=number, dry_run=True)
+        migrator.up(n=number, dry_run=True, allow_dirty=allow_dirty)
         return
     if lock:
         if not migrator.get_unapplied_migration_names():
             logger.info("No pending migrations, skipping lock.")
             return
         with MigrationLock(client=migrator.ch_client, db=migrator.get_db_name(), ttl=lock_ttl, retry_count=lock_retry):
-            migrator.up(n=number)
+            migrator.up(n=number, allow_dirty=allow_dirty)
     else:
-        migrator.up(n=number)
+        migrator.up(n=number, allow_dirty=allow_dirty)
 
 
 @click.command()
@@ -75,8 +84,12 @@ def rollback(ctx: click.Context, number: int, lock: bool, lock_ttl: int, lock_re
 @click.option("--all", "show_all", is_flag=True, default=False, help="Show all migrations.")
 @click.pass_context
 def show(ctx: click.Context, show_all: bool) -> None:
-    output = Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"]).show_migrations(show_all=show_all)
+    output, warning = Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"]).show_migrations(
+        show_all=show_all
+    )
     click.echo(output)
+    if warning:
+        click.echo(f"\n{warning}", err=True)
 
 
 @click.command()
@@ -89,6 +102,25 @@ def show(ctx: click.Context, show_all: bool) -> None:
 )
 def new(ctx: click.Context, name: str) -> None:
     Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"]).create_new_migration(name=name)
+
+
+@click.command()
+@click.pass_context
+def repair(ctx: click.Context) -> None:
+    migrator = Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"])
+    mismatches = migrator.validate_checksums()
+    if not mismatches:
+        click.echo("Nothing to repair. All checksums are valid.")
+        return
+    click.echo("Modified migrations:")
+    for name, stored, actual in mismatches:
+        if actual:
+            click.echo(f"  {name}: {stored[:12]}... \u2192 {actual[:12]}...")
+        else:
+            click.echo(f"  {name}: file missing (skipped)")
+    repaired = migrator.repair()
+    if repaired:
+        click.echo(f"\nRepaired {len(repaired)} migration(s).")
 
 
 @click.command("force-unlock")
@@ -164,5 +196,6 @@ main.add_command(new)
 main.add_command(up)
 main.add_command(rollback)
 main.add_command(show)
+main.add_command(repair)
 main.add_command(force_unlock)
 main.add_command(lock_info)

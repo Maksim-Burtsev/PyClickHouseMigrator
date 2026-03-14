@@ -1,4 +1,13 @@
 from .lock import LockError, LockTimeoutError, MigrationLock
-from .migrator import Migrator
+from .migrator import ChecksumMismatch, ChecksumMismatchError, Migrator, compute_checksum, normalize_content
 
-__all__ = ["LockError", "LockTimeoutError", "MigrationLock", "Migrator"]
+__all__ = [
+    "ChecksumMismatch",
+    "ChecksumMismatchError",
+    "LockError",
+    "LockTimeoutError",
+    "MigrationLock",
+    "Migrator",
+    "compute_checksum",
+    "normalize_content",
+]

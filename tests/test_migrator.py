@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import logging
 import os
-import re
 import shutil
-from collections.abc import Generator
 
+import click
 import pytest
 from clickhouse_driver import Client
 
@@ -19,98 +18,7 @@ from py_clickhouse_migrator.migrator import (
     MissingDatabaseUrlError,
 )
 
-MIGRATION_FILENAME_REGEX = re.compile(r"^\d{14}(?:_\w+)*\.py$")
-
-TEST_MIGRATION_TEMPLATE: str = '''
-def up() -> str:
-    return """{up}"""
-
-
-def rollback() -> str:
-    return """{rollback}"""
-'''
-
-
-def table_exists(ch_client: Client, table_name: str) -> bool:
-    result = ch_client.execute(
-        "SELECT count() FROM system.tables WHERE database = currentDatabase() AND name = %(name)s",
-        {"name": table_name},
-    )
-    return bool(result[0][0] > 0)
-
-
-def create_test_migration(
-    name: str,
-    up: str,
-    rollback: str,
-    migrator: Migrator,
-) -> str:
-    filename: str = migrator.get_new_migration_filename(name)
-    filepath: str = f"{DEFAULT_MIGRATIONS_DIR}/{filename}"
-    with open(filepath, "w") as f:
-        f.write(TEST_MIGRATION_TEMPLATE.format(up=up, rollback=rollback))
-    return filename
-
-
-@pytest.fixture(autouse=True)
-def clean_db_dir() -> Generator[None]:
-    yield
-    if os.path.exists("./db"):
-        shutil.rmtree("./db")
-
-
-@pytest.fixture(scope="function")
-def migrator_init(migrator: Migrator, ch_client: Client) -> Generator[None]:
-    migrator.init()
-    assert table_exists(ch_client, "db_migrations")
-
-    yield
-
-    ch_client.execute("DROP TABLE IF EXISTS db_migrations")
-
-
-@pytest.fixture(scope="function")
-def test_table_from_migration(migrator: Migrator, migrator_init: None, ch_client: Client) -> Generator[str]:
-    filename: str = create_test_migration(
-        name="test_1",
-        up="CREATE TABLE IF NOT EXISTS test_table (id Integer) Engine=MergeTree() ORDER BY id;",
-        rollback="DROP TABLE IF EXISTS test_table",
-        migrator=migrator,
-    )
-    migrator.up()
-
-    yield filename
-
-    ch_client.execute("DROP TABLE IF EXISTS test_table")
-
-
-@pytest.fixture(scope="function")
-def test_tables_from_migration(migrator: Migrator, migrator_init: None, ch_client: Client) -> Generator[list[str]]:
-    filename_1: str = create_test_migration(
-        name="test_1",
-        up="CREATE TABLE IF NOT EXISTS test_table_1 (id Integer) Engine=MergeTree() ORDER BY id;",
-        rollback="DROP TABLE IF EXISTS test_table_1",
-        migrator=migrator,
-    )
-    filename_2: str = create_test_migration(
-        name="test_2",
-        up="CREATE TABLE IF NOT EXISTS test_table_2 (id String) Engine=MergeTree() ORDER BY id;",
-        rollback="DROP TABLE IF EXISTS test_table_2",
-        migrator=migrator,
-    )
-    filename_3: str = create_test_migration(
-        name="test_3",
-        up="CREATE TABLE IF NOT EXISTS test_table_3 (id String) Engine=MergeTree() ORDER BY id;",
-        rollback="DROP TABLE IF EXISTS test_table_3",
-        migrator=migrator,
-    )
-    migrator.up()
-
-    yield [filename_1, filename_2, filename_3]
-
-    ch_client.execute("DROP TABLE IF EXISTS test_table_1")
-    ch_client.execute("DROP TABLE IF EXISTS test_table_2")
-    ch_client.execute("DROP TABLE IF EXISTS test_table_3")
+from tests.helpers import MIGRATION_FILENAME_REGEX, create_test_migration, table_exists
 
 
 def test_db_migrations_table_creation(ch_client: Client, test_db: str) -> None:
@@ -126,7 +34,8 @@ def test_db_migrations_table_creation(ch_client: Client, test_db: str) -> None:
         "    `name` String,\n"
         "    `up` String,\n"
         "    `rollback` String,\n"
-        "    `dt` DateTime64(3) DEFAULT now()\n"
+        "    `dt` DateTime64(3) DEFAULT now(),\n"
+        "    `checksum` String DEFAULT ''\n"
         ")\n"
         "ENGINE = MergeTree\n"
         "ORDER BY dt\n"
@@ -552,14 +461,16 @@ def test_save_applied_migration(migrator: Migrator, ch_client: Client, migrator_
         name="test",
         up="CREATE TABLE IF NOT EXISTS test_table (id Integer) Engine=MergeTree() ORDER BY id;",
         rollback="DROP TABLE IF EXISTS test_table;",
+        checksum="abc123",
     )
 
     assert ch_client.execute("SELECT count() FROM db_migrations")[0][0] == 1
-    row = ch_client.execute("SELECT name, up, rollback FROM db_migrations LIMIT 1")[0]
+    row = ch_client.execute("SELECT name, up, rollback, checksum FROM db_migrations LIMIT 1")[0]
 
     assert row[0] == "test"
     assert row[1] == "CREATE TABLE IF NOT EXISTS test_table (id Integer) Engine=MergeTree() ORDER BY id;"
     assert row[2] == "DROP TABLE IF EXISTS test_table;"
+    assert row[3] == "abc123"
 
     # clean
     ch_client.execute("DELETE FROM db_migrations WHERE name='test'")
@@ -596,7 +507,8 @@ CREATE TABLE IF NOT EXISTS test.db_migrations
     `name` String,
     `up` String,
     `rollback` String,
-    `dt` DateTime64(3) DEFAULT now()
+    `dt` DateTime64(3) DEFAULT now(),
+    `checksum` String DEFAULT ''
 )
 ENGINE = MergeTree
 ORDER BY dt
@@ -727,13 +639,14 @@ def test_show_migrations_default_limits_applied(migrator: Migrator, migrator_ini
         )
     migrator.up()
 
-    output = migrator.show_migrations()
+    output, warning = migrator.show_migrations()
+    plain = click.unstyle(output)
 
-    assert output.count("[✔]") == 5
-    assert "... and 2 more applied" in output
-    assert "(HEAD)" in output
-    assert "Applied: 7" in output
-    assert "Pending: 0" in output
+    assert plain.count("[X]") == 5
+    assert "... and 2 more applied" in plain
+    assert "(HEAD)" in plain
+    assert "Applied: 7 | Pending: 0" in plain
+    assert warning == ""
 
     # clean
     for i in range(7):
@@ -751,12 +664,14 @@ def test_show_migrations_all_flag(migrator: Migrator, migrator_init: None, ch_cl
         )
     migrator.up()
 
-    output = migrator.show_migrations(show_all=True)
+    output, warning = migrator.show_migrations(show_all=True)
+    plain = click.unstyle(output)
 
-    assert output.count("[✔]") == 7
-    assert "... and" not in output
-    assert "(HEAD)" in output
-    assert "Applied: 7" in output
+    assert plain.count("[X]") == 7
+    assert "... and" not in plain
+    assert "(HEAD)" in plain
+    assert "Applied: 7" in plain
+    assert warning == ""
 
     # clean
     for i in range(7):

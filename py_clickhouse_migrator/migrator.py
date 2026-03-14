@@ -1,9 +1,12 @@
 import datetime as dt
+import hashlib
 import importlib.util
 import logging
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import NamedTuple
 
+import click
 from clickhouse_driver import Client
 from clickhouse_driver.errors import ServerException
 from dotenv import load_dotenv
@@ -40,11 +43,30 @@ class InvalidMigrationError(Exception): ...
 class MissingDatabaseUrlError(Exception): ...
 
 
+class ChecksumMismatchError(Exception): ...
+
+
+class ChecksumMismatch(NamedTuple):
+    name: str
+    stored: str
+    actual: str
+
+
+def normalize_content(content: str) -> str:
+    lines = [line.rstrip() for line in content.splitlines()]
+    return "\n".join(lines).strip()
+
+
+def compute_checksum(content: str) -> str:
+    return hashlib.sha256(normalize_content(content).encode("utf-8")).hexdigest()
+
+
 @dataclass
 class Migration:
     name: str
     up: SQL
     rollback: SQL
+    checksum: str = field(default="")
 
 
 class Migrator(object):
@@ -69,7 +91,8 @@ class Migrator(object):
             name String,
             up String,
             rollback String,
-            dt DateTime64 DEFAULT now()
+            dt DateTime64 DEFAULT now(),
+            checksum String DEFAULT ''
         )
         Engine MergeTree()
         ORDER BY dt
@@ -100,7 +123,24 @@ class Migrator(object):
         if not os.path.exists(self.migrations_dir):
             os.makedirs(self.migrations_dir)
 
-    def up(self, n: int | None = None, dry_run: bool = False) -> None:
+    def check_integrity(self, allow_dirty: bool = False) -> None:
+        mismatches = self.validate_checksums()
+        if not mismatches:
+            return
+        if allow_dirty:
+            logger.warning("Checksum mismatches found but --allow-dirty is set, continuing.")
+            return
+        details = "\n".join(
+            f"  {name}: file missing" if not actual else f"  {name}: stored={stored[:12]}... actual={actual[:12]}..."
+            for name, stored, actual in mismatches
+        )
+        raise ChecksumMismatchError(
+            f"Checksum mismatch for applied migrations:\n{details}\n\n"
+            "Run 'py-clickhouse-migrator repair' to update checksums, or use --allow-dirty to skip this check."
+        )
+
+    def up(self, n: int | None = None, dry_run: bool = False, allow_dirty: bool = False) -> None:
+        self.check_integrity(allow_dirty=allow_dirty)
         migrations: list[Migration] = self.get_migrations_for_apply(n)
         if not migrations:
             logger.info("There are no migrations to apply.")
@@ -114,6 +154,7 @@ class Migrator(object):
                 name=migration.name,
                 up=migration.up,
                 rollback=migration.rollback,
+                checksum=migration.checksum,
             )
             logger.info("%s applied [✔]", migration.name)
         if not dry_run:
@@ -166,11 +207,14 @@ class Migrator(object):
             if not up.strip():
                 logger.warning("Skip empty migration: %s", filename)
                 continue
+            with open(filepath) as f:
+                file_content = f.read()
             result.append(
                 Migration(
                     name=filename,
                     up=up,
                     rollback=module.rollback(),
+                    checksum=compute_checksum(file_content),
                 )
             )
 
@@ -229,41 +273,121 @@ class Migrator(object):
             f.write(result[:-2])
         logger.info("Writing schema %s", schema_path)
 
-    def save_applied_migration(self, name: str, up: SQL, rollback: SQL) -> None:
+    def save_applied_migration(self, name: str, up: SQL, rollback: SQL, checksum: str = "") -> None:
         self.ch_client.execute(
-            "INSERT INTO db_migrations (name, up, rollback) VALUES",
-            [[name, up, rollback]],
+            "INSERT INTO db_migrations (name, up, rollback, checksum) VALUES",
+            [[name, up, rollback, checksum]],
         )
 
     def delete_migration(self, name: str) -> None:
-        self.ch_client.execute("DELETE FROM db_migrations WHERE name = %(name)s", {"name": name})
+        self.ch_client.execute(
+            "DELETE FROM db_migrations WHERE name = %(name)s",
+            {"name": name},
+            settings={"mutations_sync": "1"},
+        )
 
-    def show_migrations(self, show_all: bool = False) -> str:
+    def validate_checksums(self) -> list[ChecksumMismatch]:
+        rows: list[tuple[str, str]] = self.ch_client.execute("SELECT name, checksum FROM db_migrations ORDER BY dt")
+        mismatches: list[ChecksumMismatch] = []
+        for name, stored_checksum in rows:
+            if not stored_checksum:
+                continue
+            filepath = f"{self.migrations_dir}/{name}"
+            if not os.path.exists(filepath):
+                mismatches.append(ChecksumMismatch(name, stored_checksum, ""))
+                continue
+            with open(filepath) as f:
+                actual_checksum = compute_checksum(f.read())
+            if actual_checksum != stored_checksum:
+                mismatches.append(ChecksumMismatch(name, stored_checksum, actual_checksum))
+        return mismatches
+
+    def repair(self) -> list[str]:
+        mismatches = self.validate_checksums()
+        if not mismatches:
+            logger.info("Nothing to repair.")
+            return []
+        repaired: list[str] = []
+        for name, _, actual in mismatches:
+            if not actual:
+                logger.warning("Skipping %s: file missing.", name)
+                continue
+            self.ch_client.execute(
+                "ALTER TABLE db_migrations UPDATE checksum = %(checksum)s WHERE name = %(name)s",
+                {"checksum": actual, "name": name},
+                settings={"mutations_sync": "1"},
+            )
+            repaired.append(name)
+        return repaired
+
+    def show_migrations(self, show_all: bool = False) -> tuple[str, str]:
         applied_names = self.get_applied_migrations_names()[::-1]
         unapplied_names = self.get_unapplied_migration_names()
         total_applied = len(applied_names)
         total_pending = len(unapplied_names)
 
-        lines: list[str] = ["Applied:"]
+        mismatch_map: dict[str, str] = {}
+        for name, _, actual in self.validate_checksums():
+            mismatch_map[name] = "missing" if not actual else "modified"
+
+        lines: list[str] = [click.style("Applied:", bold=True)]
         if not applied_names:
             lines.append("  none")
         else:
             visible = applied_names if show_all else applied_names[:5]
             for i, name in enumerate(visible):
-                suffix = " (HEAD)" if i == 0 else ""
-                lines.append(f"  [✔] {name}{suffix}")
+                suffixes: list[str] = []
+                if i == 0:
+                    suffixes.append("HEAD")
+                status = mismatch_map.get(name, "")
+                if status:
+                    suffixes.append(status)
+
+                prefix = click.style("[X]", fg="green")
+                line = f"  {prefix} {name}"
+
+                if suffixes:
+                    suffix_text = ", ".join(suffixes)
+                    if "missing" in suffixes:
+                        color = "red"
+                    elif "modified" in suffixes:
+                        color = "yellow"
+                    else:
+                        color = "cyan"
+                    line += " " + click.style(f"({suffix_text})", fg=color)
+
+                lines.append(line)
             if not show_all and total_applied > 5:
                 lines.append(f"  ... and {total_applied - 5} more applied")
 
         lines.append("")
         if unapplied_names:
-            lines.append("Pending:")
+            lines.append(click.style("Pending:", bold=True))
             for name in unapplied_names:
-                lines.append(f"  [ ] {name}")
+                prefix = click.style("[ ]", dim=True)
+                lines.append(f"  {prefix} {name}")
         else:
-            lines.append("Pending: none")
+            lines.append(click.style("Pending:", bold=True) + " none")
 
         lines.append("")
-        lines.append(f"Applied: {total_applied}")
-        lines.append(f"Pending: {total_pending}")
-        return "\n".join(lines)
+        lines.append(
+            click.style(f"Applied: {total_applied}", fg="green")
+            + " | "
+            + click.style(f"Pending: {total_pending}", fg="yellow")
+        )
+
+        warning = ""
+        if mismatch_map:
+            count = len(mismatch_map)
+            issue_word = "issue" if count == 1 else "issues"
+            issue_lines: list[str] = [
+                click.style(f"WARNING: {count} integrity {issue_word} found", fg="yellow", bold=True)
+            ]
+            for name, status in mismatch_map.items():
+                if status == "missing":
+                    issue_lines.append("  " + click.style(f"{name}: migration file missing", fg="red"))
+                else:
+                    issue_lines.append("  " + click.style(f"{name}: checksum mismatch", fg="yellow"))
+            warning = "\n".join(issue_lines)
+
+        return "\n".join(lines), warning
