@@ -72,9 +72,10 @@ def rollback(ctx: click.Context, number: int, lock: bool, lock_ttl: int, lock_re
 
 
 @click.command()
+@click.option("--all", "show_all", is_flag=True, default=False, help="Show all migrations.")
 @click.pass_context
-def show(ctx: click.Context) -> None:
-    output = Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"]).show_migrations()
+def show(ctx: click.Context, show_all: bool) -> None:
+    output = Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"]).show_migrations(show_all=show_all)
     click.echo(output)
 
 

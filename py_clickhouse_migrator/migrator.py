@@ -196,7 +196,9 @@ class Migrator(object):
         # TODO assert len(result) == number?
 
     def get_new_migration_filename(self, name: str = "") -> str:
-        filename: str = f"{str(dt.datetime.now().strftime('%Y%m%d%H%M%S%f')).replace(' ', '_')}"
+        if not name:
+            logger.warning("Migration name is recommended: py-clickhouse-migrator new <name>")
+        filename: str = dt.datetime.now().strftime("%Y%m%d%H%M%S")
         if name:
             filename += f"_{name}"
         filename += ".py"
@@ -236,13 +238,32 @@ class Migrator(object):
     def delete_migration(self, name: str) -> None:
         self.ch_client.execute("DELETE FROM db_migrations WHERE name = %(name)s", {"name": name})
 
-    def show_migrations(self) -> str:
-        applied_migration_names = list(map(lambda x: f"[✔] {x}", self.get_applied_migrations_names()))[::-1]
-        if applied_migration_names:
-            applied_migration_names[0] += " (HEAD)"
-        unapplied_migration_names = list(map(lambda x: f"[ ] {x}", self.get_unapplied_migration_names()))[::-1]
-        return (
-            "\n".join(applied_migration_names + unapplied_migration_names)
-            + f"\n\nApplied: {len(applied_migration_names)}"
-            f"\nPending: {len(unapplied_migration_names)}"
-        )
+    def show_migrations(self, show_all: bool = False) -> str:
+        applied_names = self.get_applied_migrations_names()[::-1]
+        unapplied_names = self.get_unapplied_migration_names()
+        total_applied = len(applied_names)
+        total_pending = len(unapplied_names)
+
+        lines: list[str] = ["Applied:"]
+        if not applied_names:
+            lines.append("  none")
+        else:
+            visible = applied_names if show_all else applied_names[:5]
+            for i, name in enumerate(visible):
+                suffix = " (HEAD)" if i == 0 else ""
+                lines.append(f"  [✔] {name}{suffix}")
+            if not show_all and total_applied > 5:
+                lines.append(f"  ... and {total_applied - 5} more applied")
+
+        lines.append("")
+        if unapplied_names:
+            lines.append("Pending:")
+            for name in unapplied_names:
+                lines.append(f"  [ ] {name}")
+        else:
+            lines.append("Pending: none")
+
+        lines.append("")
+        lines.append(f"Applied: {total_applied}")
+        lines.append(f"Pending: {total_pending}")
+        return "\n".join(lines)

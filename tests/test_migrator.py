@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import re
 import shutil
@@ -18,7 +19,7 @@ from py_clickhouse_migrator.migrator import (
     MissingDatabaseUrlError,
 )
 
-MIGRATION_FILENAME_REGEX = re.compile(r"^\d{20}(?:_\w+)*\.py$")
+MIGRATION_FILENAME_REGEX = re.compile(r"^\d{14}(?:_\w+)*\.py$")
 
 TEST_MIGRATION_TEMPLATE: str = '''
 def up() -> str:
@@ -690,3 +691,73 @@ def test_rollback_dry_run_multiple(
     assert table_exists(ch_client, "test_table_1")
     assert table_exists(ch_client, "test_table_2")
     assert table_exists(ch_client, "test_table_3")
+
+
+def test_new_migration_filename_format(migrator: Migrator) -> None:
+    """Filename should be 14 digits (YYYYMMDDHHmmSS) without microseconds."""
+    filename: str = migrator.get_new_migration_filename("test")
+    assert MIGRATION_FILENAME_REGEX.match(filename)
+    # 14 digits before _
+    stem = filename.split("_", maxsplit=1)[0]
+    assert len(stem) == 14
+    assert stem.isdigit()
+
+
+def test_new_migration_filename_with_name(migrator: Migrator) -> None:
+    filename: str = migrator.get_new_migration_filename("create_users")
+    assert "_create_users.py" in filename
+    assert MIGRATION_FILENAME_REGEX.match(filename)
+
+
+def test_new_migration_filename_without_name_logs_warning(migrator: Migrator, caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.WARNING, logger="py_clickhouse_migrator"):
+        filename = migrator.get_new_migration_filename()
+    assert "Migration name is recommended" in caplog.text
+    assert MIGRATION_FILENAME_REGEX.match(filename)
+
+
+def test_show_migrations_default_limits_applied(migrator: Migrator, migrator_init: None, ch_client: Client) -> None:
+    """With >5 applied migrations, show only last 5 + '... and N more'."""
+    for i in range(7):
+        create_test_migration(
+            name=f"table_{i}",
+            up=f"CREATE TABLE IF NOT EXISTS t_{i} (id Int32) Engine=MergeTree() ORDER BY id;",
+            rollback=f"DROP TABLE IF EXISTS t_{i}",
+            migrator=migrator,
+        )
+    migrator.up()
+
+    output = migrator.show_migrations()
+
+    assert output.count("[✔]") == 5
+    assert "... and 2 more applied" in output
+    assert "(HEAD)" in output
+    assert "Applied: 7" in output
+    assert "Pending: 0" in output
+
+    # clean
+    for i in range(7):
+        ch_client.execute(f"DROP TABLE IF EXISTS t_{i}")
+
+
+def test_show_migrations_all_flag(migrator: Migrator, migrator_init: None, ch_client: Client) -> None:
+    """show_all=True should show every applied migration."""
+    for i in range(7):
+        create_test_migration(
+            name=f"table_{i}",
+            up=f"CREATE TABLE IF NOT EXISTS t_{i} (id Int32) Engine=MergeTree() ORDER BY id;",
+            rollback=f"DROP TABLE IF EXISTS t_{i}",
+            migrator=migrator,
+        )
+    migrator.up()
+
+    output = migrator.show_migrations(show_all=True)
+
+    assert output.count("[✔]") == 7
+    assert "... and" not in output
+    assert "(HEAD)" in output
+    assert "Applied: 7" in output
+
+    # clean
+    for i in range(7):
+        ch_client.execute(f"DROP TABLE IF EXISTS t_{i}")
