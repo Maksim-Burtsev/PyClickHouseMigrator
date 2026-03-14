@@ -40,6 +40,22 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.11", "3.12", "3.13", "3.14"]
+
+    services:
+      clickhouse:
+        image: clickhouse/clickhouse-server:latest
+        ports:
+          - 19000:9000
+        env:
+          CLICKHOUSE_DB: test
+          CLICKHOUSE_USER: default
+          CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+        options: >-
+          --health-cmd "clickhouse-client --query 'SELECT 1'"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -50,9 +66,6 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: uv sync --dev
 
-      - name: Start ClickHouse
-        run: docker compose -f docker-compose.test.yml up -d --wait
-
       - name: Run tests
         run: uv run pytest -v --cov=py_clickhouse_migrator --cov-report=xml
 
@@ -62,7 +75,3 @@ jobs:
         with:
           files: coverage.xml
           token: ${{ secrets.CODECOV_TOKEN }}
-
-      - name: Stop ClickHouse
-        if: always()
-        run: docker compose -f docker-compose.test.yml down
