@@ -70,7 +70,7 @@ jobs:
         run: uv run pytest -v --cov=py_clickhouse_migrator --cov-report=xml
 
       - name: Upload coverage to Codecov
-        if: matrix.python-version == '3.14'
+        if: matrix.python-version == '3.13'
         uses: codecov/codecov-action@v4
         with:
           files: coverage.xml
