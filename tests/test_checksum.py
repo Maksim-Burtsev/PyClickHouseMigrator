@@ -4,6 +4,7 @@ import os
 
 import click
 import pytest
+from click.testing import CliRunner
 from clickhouse_driver import Client
 
 from py_clickhouse_migrator.migrator import (
@@ -14,6 +15,7 @@ from py_clickhouse_migrator.migrator import (
     normalize_content,
 )
 
+from py_clickhouse_migrator.cli import main
 from tests.helpers import TEST_MIGRATION_TEMPLATE, create_test_migration
 
 
@@ -441,10 +443,6 @@ def test_show_warning_plural(migrator: Migrator, migrator_init: None, ch_client:
 
 def test_show_warning_stderr(migrator: Migrator, migrator_init: None, ch_client: Client, test_db: str) -> None:
     """WARNING block should be routed to stderr via CLI."""
-    from click.testing import CliRunner
-
-    from py_clickhouse_migrator.cli import main
-
     filename = create_test_migration(
         name="test_stderr",
         up="CREATE TABLE IF NOT EXISTS test_stderr (id Int32) Engine=MergeTree() ORDER BY id;",
