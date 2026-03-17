@@ -1,6 +1,0 @@
-version: '3'
-
-tasks:
-  test:
-    cmds:
-      - pytest tests.py
