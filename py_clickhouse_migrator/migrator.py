@@ -16,6 +16,12 @@ load_dotenv()
 logger = logging.getLogger("py_clickhouse_migrator")
 
 SQL = str
+ClickHouseSettings = dict[str, str | int]
+
+_CLUSTER_SETTINGS: ClickHouseSettings = {
+    "insert_quorum": "auto",
+    "select_sequential_consistency": 1,
+}
 
 
 MIGRATION_TEMPLATE: str = '''
@@ -74,6 +80,7 @@ class Migrator(object):
         self,
         database_url: str = "",
         migrations_dir: str = "",
+        cluster: str = "",
     ) -> None:
         self.database_url: str = database_url or os.getenv("DATABASE_URL", "")
         if not self.database_url:
@@ -81,23 +88,29 @@ class Migrator(object):
                 "ClickHouse url was not provided.\n.env variable 'DATABASE_URL' or param --url is missing."
             )
         self.migrations_dir: str = migrations_dir or os.getenv("CLICKHOUSE_MIGRATE_DIR", DEFAULT_MIGRATIONS_DIR)
+        self.cluster: str = cluster or os.getenv("CLICKHOUSE_CLUSTER", "")
+        self._settings: ClickHouseSettings = _CLUSTER_SETTINGS.copy() if self.cluster else {}
         self.ch_client: Client = Client.from_url(database_url)
         self.health_check()
         self.check_migrations_table()
 
     def check_migrations_table(self) -> None:
-        migrator_table: SQL = """
-        CREATE TABLE IF NOT EXISTS db_migrations (
+        on_cluster = f"ON CLUSTER {self.cluster}" if self.cluster else ""
+        engine = (
+            "ReplicatedMergeTree('/clickhouse/tables/{uuid}/{shard}', '{replica}')" if self.cluster else "MergeTree()"
+        )
+        migrator_table: SQL = f"""
+        CREATE TABLE IF NOT EXISTS db_migrations {on_cluster} (
             name String,
             up String,
             rollback String,
             dt DateTime64 DEFAULT now(),
             checksum String DEFAULT ''
         )
-        Engine MergeTree()
+        Engine {engine}
         ORDER BY dt
         """
-        self.ch_client.execute(migrator_table)
+        self.ch_client.execute(migrator_table, settings=self._settings)
 
     def init(self) -> None:
         db_name: str = self.get_db_name()
@@ -167,7 +180,6 @@ class Migrator(object):
                 logger.info("-- %s (rollback)", migration.name)
                 logger.info("%s\n", migration.rollback.strip())
                 continue
-            # TODO open transaction by with flag (for enabled setting)
             self.apply_migration(
                 query=migration.rollback,
             )
@@ -226,7 +238,10 @@ class Migrator(object):
         return sorted(list(set(filenames) - set(applied_migrations)))
 
     def get_applied_migrations_names(self) -> list[str]:
-        return [row[0] for row in self.ch_client.execute("SELECT name FROM db_migrations ORDER BY dt")]
+        return [
+            row[0]
+            for row in self.ch_client.execute("SELECT name FROM db_migrations ORDER BY dt", settings=self._settings)
+        ]
 
     def get_migrations_for_rollback(self, number: int = 1) -> list[Migration]:
         if number <= 0:
@@ -234,10 +249,10 @@ class Migrator(object):
         return [
             Migration(name=row[0], up=row[1], rollback=row[2])
             for row in self.ch_client.execute(
-                f"SELECT name, up, rollback FROM db_migrations ORDER BY dt DESC LIMIT {number}"
+                f"SELECT name, up, rollback FROM db_migrations ORDER BY dt DESC LIMIT {number}",
+                settings=self._settings,
             )
         ]
-        # TODO assert len(result) == number?
 
     def get_new_migration_filename(self, name: str = "") -> str:
         if not name:
@@ -277,17 +292,21 @@ class Migrator(object):
         self.ch_client.execute(
             "INSERT INTO db_migrations (name, up, rollback, checksum) VALUES",
             [[name, up, rollback, checksum]],
+            settings=self._settings,
         )
 
     def delete_migration(self, name: str) -> None:
+        settings: ClickHouseSettings = {**self._settings, "mutations_sync": "1"}
         self.ch_client.execute(
             "DELETE FROM db_migrations WHERE name = %(name)s",
             {"name": name},
-            settings={"mutations_sync": "1"},
+            settings=settings,
         )
 
     def validate_checksums(self) -> list[ChecksumMismatch]:
-        rows: list[tuple[str, str]] = self.ch_client.execute("SELECT name, checksum FROM db_migrations ORDER BY dt")
+        rows: list[tuple[str, str]] = self.ch_client.execute(
+            "SELECT name, checksum FROM db_migrations ORDER BY dt", settings=self._settings
+        )
         mismatches: list[ChecksumMismatch] = []
         for name, stored_checksum in rows:
             if not stored_checksum:
@@ -312,10 +331,11 @@ class Migrator(object):
             if not actual:
                 logger.warning("Skipping %s: file missing.", name)
                 continue
+            settings: ClickHouseSettings = {**self._settings, "mutations_sync": "1"}
             self.ch_client.execute(
                 "ALTER TABLE db_migrations UPDATE checksum = %(checksum)s WHERE name = %(name)s",
                 {"checksum": actual, "name": name},
-                settings={"mutations_sync": "1"},
+                settings=settings,
             )
             repaired.append(name)
         return repaired

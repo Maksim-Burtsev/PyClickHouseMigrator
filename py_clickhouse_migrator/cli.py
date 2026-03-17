@@ -12,12 +12,13 @@ logger = logging.getLogger("py_clickhouse_migrator")
 class ContextObj(t.TypedDict):
     url: str
     path: str | None
+    cluster: str
 
 
 @click.command()
 @click.pass_context
 def init(ctx: click.Context) -> None:
-    Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"]).init()
+    Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"], cluster=ctx.obj["cluster"]).init()
 
 
 @click.command()
@@ -42,7 +43,8 @@ def up(
     dry_run: bool,
     allow_dirty: bool,
 ) -> None:
-    migrator = Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"])
+    cluster = ctx.obj["cluster"]
+    migrator = Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"], cluster=cluster)
     if dry_run:
         migrator.up(n=number, dry_run=True, allow_dirty=allow_dirty)
         return
@@ -50,7 +52,9 @@ def up(
         if not migrator.get_unapplied_migration_names():
             logger.info("No pending migrations, skipping lock.")
             return
-        with MigrationLock(client=migrator.ch_client, db=migrator.get_db_name(), ttl=lock_ttl, retry_count=lock_retry):
+        with MigrationLock(
+            client=migrator.ch_client, db=migrator.get_db_name(), ttl=lock_ttl, retry_count=lock_retry, cluster=cluster
+        ):
             migrator.up(n=number, allow_dirty=allow_dirty)
     else:
         migrator.up(n=number, allow_dirty=allow_dirty)
@@ -69,12 +73,15 @@ def up(
 @click.option("--dry-run", is_flag=True, default=False, help="Show SQL without executing.")
 @click.pass_context
 def rollback(ctx: click.Context, number: int, lock: bool, lock_ttl: int, lock_retry: int, dry_run: bool) -> None:
-    migrator = Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"])
+    cluster = ctx.obj["cluster"]
+    migrator = Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"], cluster=cluster)
     if dry_run:
         migrator.rollback(number=number, dry_run=True)
         return
     if lock:
-        with MigrationLock(client=migrator.ch_client, db=migrator.get_db_name(), ttl=lock_ttl, retry_count=lock_retry):
+        with MigrationLock(
+            client=migrator.ch_client, db=migrator.get_db_name(), ttl=lock_ttl, retry_count=lock_retry, cluster=cluster
+        ):
             migrator.rollback(number=number)
     else:
         migrator.rollback(number=number)
@@ -84,9 +91,9 @@ def rollback(ctx: click.Context, number: int, lock: bool, lock_ttl: int, lock_re
 @click.option("--all", "show_all", is_flag=True, default=False, help="Show all migrations.")
 @click.pass_context
 def show(ctx: click.Context, show_all: bool) -> None:
-    output, warning = Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"]).show_migrations(
-        show_all=show_all
-    )
+    output, warning = Migrator(
+        database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"], cluster=ctx.obj["cluster"]
+    ).show_migrations(show_all=show_all)
     click.echo(output)
     if warning:
         click.echo(f"\n{warning}", err=True)
@@ -101,13 +108,15 @@ def show(ctx: click.Context, show_all: bool) -> None:
     required=False,
 )
 def new(ctx: click.Context, name: str) -> None:
-    Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"]).create_new_migration(name=name)
+    Migrator(
+        database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"], cluster=ctx.obj["cluster"]
+    ).create_new_migration(name=name)
 
 
 @click.command()
 @click.pass_context
 def repair(ctx: click.Context) -> None:
-    migrator = Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"])
+    migrator = Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"], cluster=ctx.obj["cluster"])
     mismatches = migrator.validate_checksums()
     if not mismatches:
         click.echo("Nothing to repair. All checksums are valid.")
@@ -126,8 +135,9 @@ def repair(ctx: click.Context) -> None:
 @click.command("force-unlock")
 @click.pass_context
 def force_unlock(ctx: click.Context) -> None:
-    migrator = Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"])
-    lock = MigrationLock(client=migrator.ch_client, db=migrator.get_db_name())
+    cluster = ctx.obj["cluster"]
+    migrator = Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"], cluster=cluster)
+    lock = MigrationLock(client=migrator.ch_client, db=migrator.get_db_name(), cluster=cluster)
     lock.force_release()
     click.echo("Lock forcefully released.")
 
@@ -135,8 +145,9 @@ def force_unlock(ctx: click.Context) -> None:
 @click.command("lock-info")
 @click.pass_context
 def lock_info(ctx: click.Context) -> None:
-    migrator = Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"])
-    ml = MigrationLock(client=migrator.ch_client, db=migrator.get_db_name())
+    cluster = ctx.obj["cluster"]
+    migrator = Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"], cluster=cluster)
+    ml = MigrationLock(client=migrator.ch_client, db=migrator.get_db_name(), cluster=cluster)
     info = ml.get_lock_info()
     if info is None:
         click.echo("No active lock.")
@@ -175,8 +186,15 @@ def lock_info(ctx: click.Context) -> None:
     default=False,
     help="Suppress all output except errors.",
 )
+@click.option(
+    "--cluster",
+    type=str,
+    help="ClickHouse cluster name for ON CLUSTER DDL and replicated service tables.",
+    default="",
+    required=False,
+)
 @click.pass_context
-def main(ctx: click.Context, url: str, path: str, verbose: bool, quiet: bool) -> None:
+def main(ctx: click.Context, url: str, path: str, verbose: bool, quiet: bool, cluster: str) -> None:
     if verbose:
         level = logging.DEBUG
     elif quiet:
@@ -188,6 +206,7 @@ def main(ctx: click.Context, url: str, path: str, verbose: bool, quiet: bool) ->
     ctx.obj = ContextObj(
         url=url,
         path=path,
+        cluster=cluster,
     )
 
 

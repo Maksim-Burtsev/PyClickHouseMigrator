@@ -14,6 +14,13 @@ from clickhouse_driver import Client
 logger = logging.getLogger("py_clickhouse_migrator")
 
 _DB_NAME_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+
+ClickHouseSettings = dict[str, str | int]
+
+_CLUSTER_SETTINGS: ClickHouseSettings = {
+    "insert_quorum": "auto",
+    "select_sequential_consistency": 1,
+}
 _DT_FMT = "%Y-%m-%d %H:%M:%S"
 
 
@@ -61,6 +68,7 @@ class MigrationLock:
         ttl: int = 300,
         retry_count: int = 0,
         retry_delay: float = 1.0,
+        cluster: str = "",
     ) -> None:
         if not _DB_NAME_RE.match(db):
             raise ValueError(f"Invalid database name: {db!r}")
@@ -69,19 +77,27 @@ class MigrationLock:
         self._ttl = ttl
         self._retry_count = retry_count
         self._retry_delay = retry_delay
+        self._cluster = cluster
+        self._settings: ClickHouseSettings = _CLUSTER_SETTINGS.copy() if self._cluster else {}
         self._locked_by = f"{socket.gethostname()}:{os.getpid()}"
         self.ensure_table()
 
     def ensure_table(self) -> None:
+        on_cluster = f"ON CLUSTER {self._cluster}" if self._cluster else ""
+        engine = (
+            "ReplicatedReplacingMergeTree('/clickhouse/tables/{uuid}/{shard}', '{replica}', locked_at)"
+            if self._cluster
+            else "ReplacingMergeTree(locked_at)"
+        )
         self._client.execute(
             f"""
-            CREATE TABLE IF NOT EXISTS {self._db}.{self._LOCK_TABLE} (
+            CREATE TABLE IF NOT EXISTS {self._db}.{self._LOCK_TABLE} {on_cluster} (
                 lock_id    String    DEFAULT 'migration',
                 locked_by  String,
                 locked_at  DateTime64(3) DEFAULT now64(3),
                 expires_at DateTime64(3),
                 is_locked  UInt8     DEFAULT 1
-            ) ENGINE = ReplacingMergeTree(locked_at)
+            ) ENGINE = {engine}
             ORDER BY lock_id
             """
         )
@@ -93,6 +109,7 @@ class MigrationLock:
         self._client.execute(
             f"INSERT INTO {self._db}.{self._LOCK_TABLE} (lock_id, locked_by, locked_at, expires_at, is_locked) VALUES",
             [[self._LOCK_ID, self._locked_by, now, expires, 1]],
+            settings=self._settings,
         )
         verified = self._get_active_lock()
         if verified is not None and verified.locked_by == self._locked_by:
@@ -145,6 +162,7 @@ class MigrationLock:
         self._client.execute(
             f"INSERT INTO {self._db}.{self._LOCK_TABLE} (lock_id, locked_by, locked_at, expires_at, is_locked) VALUES",
             [[self._LOCK_ID, self._locked_by, now, now, 0]],
+            settings=self._settings,
         )
         logger.debug("Lock released by %s", self._locked_by)
 
@@ -153,6 +171,7 @@ class MigrationLock:
         self._client.execute(
             f"INSERT INTO {self._db}.{self._LOCK_TABLE} (lock_id, locked_by, locked_at, expires_at, is_locked) VALUES",
             [[self._LOCK_ID, "force_release", now, now, 0]],
+            settings=self._settings,
         )
         logger.info("Lock forcefully released.")
 
@@ -168,6 +187,7 @@ class MigrationLock:
             f"FROM {self._db}.{self._LOCK_TABLE} FINAL "
             f"WHERE lock_id = %(lock_id)s AND is_locked = 1 AND expires_at > now64(3)",
             {"lock_id": self._LOCK_ID},
+            settings=self._settings,
         )
         if not rows:
             return None

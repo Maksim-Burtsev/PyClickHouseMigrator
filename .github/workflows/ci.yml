@@ -75,3 +75,40 @@ jobs:
         with:
           files: coverage.xml
           token: ${{ secrets.CODECOV_TOKEN }}
+
+  test-cluster:
+    name: Test (Cluster)
+    needs: lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - run: uv sync --dev
+
+      - name: Start ClickHouse cluster
+        run: docker compose -f docker-compose.cluster.yml up -d --wait
+
+      - name: Wait for cluster to be ready
+        run: |
+          for i in $(seq 1 30); do
+            if docker compose -f docker-compose.cluster.yml exec -T clickhouse-01 \
+              clickhouse-client --query "SELECT count() FROM system.clusters WHERE cluster = 'test_cluster'" 2>/dev/null | grep -q "1"; then
+              echo "Cluster ready"
+              break
+            fi
+            echo "Waiting for cluster... ($i/30)"
+            sleep 2
+          done
+
+      - name: Run cluster tests
+        run: uv run pytest tests/ -m cluster -v
+
+      - name: Stop cluster
+        if: always()
+        run: docker compose -f docker-compose.cluster.yml down

@@ -26,6 +26,14 @@ def table_exists(ch_client: Client, table_name: str) -> bool:
     return bool(result[0][0] > 0)
 
 
+def get_engine(ch_client: Client, table_name: str) -> str:
+    rows = ch_client.execute(
+        "SELECT engine FROM system.tables WHERE database = currentDatabase() AND name = %(name)s",
+        {"name": table_name},
+    )
+    return rows[0][0] if rows else ""
+
+
 def create_test_migration(
     name: str,
     up: str,

@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import shutil
+from unittest.mock import patch
 
 import click
 import pytest
@@ -17,6 +18,8 @@ from py_clickhouse_migrator.migrator import (
     Migrator,
     MissingDatabaseUrlError,
 )
+
+from tests.conftest import DB_URL
 
 from tests.helpers import MIGRATION_FILENAME_REGEX, create_test_migration, table_exists
 
@@ -676,3 +679,30 @@ def test_show_migrations_all_flag(migrator: Migrator, migrator_init: None, ch_cl
     # clean
     for i in range(7):
         ch_client.execute(f"DROP TABLE IF EXISTS t_{i}")
+
+
+@patch.object(Migrator, "check_migrations_table")
+def test_migrator_cluster_param_from_init(_mock: object, test_db: str) -> None:
+    migrator = Migrator(database_url=test_db, cluster="my_cluster")
+    assert migrator.cluster == "my_cluster"
+
+
+def test_migrator_cluster_param_empty_by_default(ch_client: Client, test_db: str) -> None:
+    ch_client.execute("DROP TABLE IF EXISTS db_migrations")
+    migrator = Migrator(database_url=test_db)
+    assert migrator.cluster == ""
+    ch_client.execute("DROP TABLE IF EXISTS db_migrations")
+
+
+@patch.object(Migrator, "check_migrations_table")
+def test_migrator_cluster_param_from_env(_mock: object, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CLICKHOUSE_CLUSTER", "env_cluster")
+    migrator = Migrator(database_url=DB_URL)
+    assert migrator.cluster == "env_cluster"
+
+
+@patch.object(Migrator, "check_migrations_table")
+def test_migrator_cluster_param_init_overrides_env(_mock: object, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CLICKHOUSE_CLUSTER", "env_cluster")
+    migrator = Migrator(database_url=DB_URL, cluster="explicit")
+    assert migrator.cluster == "explicit"

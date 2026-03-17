@@ -109,3 +109,7 @@ disable_error_code = ["untyped-decorator"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-m 'not cluster'"
+markers = [
+    "cluster: tests requiring 2-node ClickHouse cluster (run with pytest -m cluster)",
+]

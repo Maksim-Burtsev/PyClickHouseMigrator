@@ -1,0 +1,51 @@
+services:
+  clickhouse-keeper:
+    image: clickhouse/clickhouse-keeper:latest
+    ports:
+      - "9181:9181"
+    volumes:
+      - ./tests/cluster_config/keeper/keeper_config.xml:/etc/clickhouse-keeper/keeper_config.xml
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-keeper-client --host localhost --port 9181 --query 'ruok' | grep -q imok"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+
+  clickhouse-01:
+    image: clickhouse/clickhouse-server:latest
+    ports:
+      - "19001:9000"
+    depends_on:
+      clickhouse-keeper:
+        condition: service_healthy
+    volumes:
+      - ./tests/cluster_config/node01:/etc/clickhouse-server/config.d
+    environment:
+      CLICKHOUSE_DB: test
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+
+  clickhouse-02:
+    image: clickhouse/clickhouse-server:latest
+    ports:
+      - "19002:9000"
+    depends_on:
+      clickhouse-keeper:
+        condition: service_healthy
+    volumes:
+      - ./tests/cluster_config/node02:/etc/clickhouse-server/config.d
+    environment:
+      CLICKHOUSE_DB: test
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      interval: 2s
+      timeout: 5s
+      retries: 15

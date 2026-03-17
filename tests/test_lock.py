@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime as dt
 from collections.abc import Generator
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from clickhouse_driver import Client
@@ -142,6 +142,29 @@ def test_invalid_db_name(ch_client: Client) -> None:
 
 
 def test_is_locked(lock: MigrationLock) -> None:
+    assert not lock.is_locked()
+
+    lock.acquire()
+    assert lock.is_locked()
+
+    lock.release()
+    assert not lock.is_locked()
+
+
+def test_lock_cluster_param_stored() -> None:
+    mock_client = MagicMock(spec=Client)
+    ml = MigrationLock(client=mock_client, db=DB, cluster="my_cluster")
+    assert ml._cluster == "my_cluster"
+
+
+def test_lock_cluster_param_empty_by_default(ch_client: Client) -> None:
+    ml = MigrationLock(client=ch_client, db=DB)
+    assert ml._cluster == ""
+    ch_client.execute(f"DROP TABLE IF EXISTS {DB}.{MigrationLock._LOCK_TABLE}")
+
+
+def test_acquire_release_no_cluster(lock: MigrationLock) -> None:
+    assert lock._cluster == ""
     assert not lock.is_locked()
 
     lock.acquire()
