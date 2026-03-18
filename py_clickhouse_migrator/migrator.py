@@ -3,6 +3,7 @@ import hashlib
 import importlib.util
 import logging
 import os
+import re
 import time
 from dataclasses import dataclass, field
 from typing import NamedTuple
@@ -15,6 +16,9 @@ logger = logging.getLogger("py_clickhouse_migrator")
 
 SQL = str
 ClickHouseSettings = dict[str, str | int]
+
+_SQL_IDENTIFIER_RE: re.Pattern[str] = re.compile(r"[a-zA-Z_][a-zA-Z0-9_]*\Z")  # cluster name, db name
+_MIGRATION_NAME_RE: re.Pattern[str] = re.compile(r"[a-zA-Z0-9_]+\Z")  # migration name suffix in filename
 
 _CLUSTER_SETTINGS: ClickHouseSettings = {
     "insert_quorum": "auto",
@@ -89,6 +93,8 @@ class Migrator(object):
         self.database_url: str = database_url
         self.migrations_dir: str = migrations_dir
         self.cluster: str = cluster
+        if self.cluster and not _SQL_IDENTIFIER_RE.match(self.cluster):
+            raise ValueError(f"Invalid cluster name: '{self.cluster}'. Use only letters, digits, and underscores.")
         self._connect_retries: int = connect_retries
         self._connect_retries_interval: int = connect_retries_interval
         self._settings: ClickHouseSettings = _CLUSTER_SETTINGS.copy() if self.cluster else {}
@@ -256,8 +262,6 @@ class Migrator(object):
         ]
 
     def get_migrations_for_rollback(self, number: int = 1) -> list[Migration]:
-        if number <= 0:
-            raise ValueError(f"Rollback number must be positive, got {number}")
         return [
             Migration(name=row[0], up=row[1], rollback=row[2])
             for row in self.ch_client.execute(
@@ -269,6 +273,8 @@ class Migrator(object):
     def get_new_migration_filename(self, name: str = "") -> str:
         if not name:
             logger.warning("Migration name is recommended: py-clickhouse-migrator new <name>")
+        if name and not _MIGRATION_NAME_RE.match(name):
+            raise ValueError(f"Invalid migration name: '{name}'. Use only letters, digits, and underscores.")
         filename: str = dt.datetime.now().strftime("%Y%m%d%H%M%S")
         if name:
             filename += f"_{name}"

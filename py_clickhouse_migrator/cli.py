@@ -36,13 +36,13 @@ def init(ctx: click.Context) -> None:
 @click.command()
 @click.argument(
     "number",
-    type=int,
+    type=click.IntRange(min=1),
     default=None,
     required=False,
 )
 @click.option("--lock/--no-lock", default=True, help="Enable/disable migration lock.")
-@click.option("--lock-ttl", type=int, default=300, help="Lock TTL in seconds.")
-@click.option("--lock-retry", type=int, default=3, help="Number of lock acquire retries.")
+@click.option("--lock-ttl", type=click.IntRange(min=1), default=300, help="Lock TTL in seconds.")
+@click.option("--lock-retry", type=click.IntRange(min=0), default=3, help="Number of lock acquire retries.")
 @click.option("--dry-run", is_flag=True, default=False, help="Show SQL without executing.")
 @click.option("--allow-dirty", is_flag=True, default=False, help="Skip checksum validation.")
 @click.pass_context
@@ -81,13 +81,13 @@ def up(
 @click.command()
 @click.argument(
     "number",
-    type=int,
+    type=click.IntRange(min=1),
     default=1,
     required=False,
 )
 @click.option("--lock/--no-lock", default=True, help="Enable/disable migration lock.")
-@click.option("--lock-ttl", type=int, default=300, help="Lock TTL in seconds.")
-@click.option("--lock-retry", type=int, default=3, help="Number of lock acquire retries.")
+@click.option("--lock-ttl", type=click.IntRange(min=1), default=300, help="Lock TTL in seconds.")
+@click.option("--lock-retry", type=click.IntRange(min=0), default=3, help="Number of lock acquire retries.")
 @click.option("--dry-run", is_flag=True, default=False, help="Show SQL without executing.")
 @click.pass_context
 def rollback(ctx: click.Context, number: int, lock: bool, lock_ttl: int, lock_retry: int, dry_run: bool) -> None:
@@ -245,14 +245,14 @@ def lock_info(ctx: click.Context) -> None:
 )
 @click.option(
     "--connect-retries",
-    type=int,
+    type=click.IntRange(min=0),
     default=0,
     envvar="CLICKHOUSE_MIGRATE_CONNECT_RETRIES",
     help="Max retries when connecting to ClickHouse.",
 )
 @click.option(
     "--connect-retries-interval",
-    type=int,
+    type=click.IntRange(min=0),
     default=1,
     envvar="CLICKHOUSE_MIGRATE_CONNECT_RETRIES_INTERVAL",
     help="Seconds between connection retries.",
