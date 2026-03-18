@@ -7,6 +7,7 @@ import re
 import socket
 import time
 from dataclasses import dataclass
+from typing import cast
 from types import TracebackType
 
 from clickhouse_driver import Client
@@ -126,7 +127,7 @@ class MigrationLock:
                     return
                 lock_info = holder
 
-            if lock_info is not None and attempt < retry_count:
+            if attempt < retry_count:
                 logger.debug(
                     "Lock held by %s, retrying in %.1fs (%d/%d)",
                     lock_info.locked_by,
@@ -136,25 +137,18 @@ class MigrationLock:
                 )
                 time.sleep(retry_delay)
 
-        # Last chance: lock may have been released after the loop
-        lock_info = self._get_active_lock()
-        if lock_info is None:
-            holder = self._try_acquire()
-            if holder is None:
-                return
-            lock_info = holder
-
+        info = cast(LockInfo, lock_info)
         if retry_count > 0:
             raise LockTimeoutError(
-                locked_by=lock_info.locked_by,
-                locked_at=lock_info.locked_at,
-                expires_at=lock_info.expires_at,
+                locked_by=info.locked_by,
+                locked_at=info.locked_at,
+                expires_at=info.expires_at,
                 retries=retry_count,
             )
         raise LockError(
-            locked_by=lock_info.locked_by,
-            locked_at=lock_info.locked_at,
-            expires_at=lock_info.expires_at,
+            locked_by=info.locked_by,
+            locked_at=info.locked_at,
+            expires_at=info.expires_at,
         )
 
     def release(self) -> None:
