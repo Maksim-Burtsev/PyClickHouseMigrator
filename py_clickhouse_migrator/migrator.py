@@ -3,6 +3,7 @@ import hashlib
 import importlib.util
 import logging
 import os
+import time
 from dataclasses import dataclass, field
 from typing import NamedTuple
 
@@ -81,6 +82,8 @@ class Migrator(object):
         database_url: str = "",
         migrations_dir: str = "",
         cluster: str = "",
+        connect_retries: int = 0,
+        connect_retries_interval: int = 1,
     ) -> None:
         self.database_url: str = database_url or os.getenv("DATABASE_URL", "")
         if not self.database_url:
@@ -89,6 +92,10 @@ class Migrator(object):
             )
         self.migrations_dir: str = migrations_dir or os.getenv("CLICKHOUSE_MIGRATE_DIR", DEFAULT_MIGRATIONS_DIR)
         self.cluster: str = cluster or os.getenv("CLICKHOUSE_CLUSTER", "")
+        self._connect_retries: int = connect_retries or int(os.getenv("CLICKHOUSE_CONNECT_RETRIES", "0"))
+        self._connect_retries_interval: int = connect_retries_interval or int(
+            os.getenv("CLICKHOUSE_CONNECT_RETRIES_INTERVAL", "1")
+        )
         self._settings: ClickHouseSettings = _CLUSTER_SETTINGS.copy() if self.cluster else {}
         self.ch_client: Client = Client.from_url(database_url)
         self.health_check()
@@ -121,10 +128,20 @@ class Migrator(object):
         logger.info("Migrations directory %s successfully initialized.", self.migrations_dir)
 
     def health_check(self) -> None:
-        try:
-            self.ch_client.execute("SELECT 1")
-        except Exception as exc:
-            raise ClickHouseServerIsNotHealthyError(f"ClickHouse server is not healthy: {exc}.") from exc
+        for attempt in range(self._connect_retries + 1):
+            try:
+                self.ch_client.execute("SELECT 1")
+                return
+            except Exception as exc:
+                if attempt == self._connect_retries:
+                    raise ClickHouseServerIsNotHealthyError(f"ClickHouse server is not healthy: {exc}.") from exc
+                logger.warning(
+                    "Connection attempt %d/%d failed, retrying in %ds",
+                    attempt + 1,
+                    self._connect_retries,
+                    self._connect_retries_interval,
+                )
+                time.sleep(self._connect_retries_interval)
 
     def get_db_name(self) -> str:
         db_name: str = self.database_url.rsplit("/", 1)[-1]

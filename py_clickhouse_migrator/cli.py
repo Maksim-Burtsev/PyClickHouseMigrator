@@ -13,12 +13,20 @@ class ContextObj(t.TypedDict):
     url: str
     path: str | None
     cluster: str
+    connect_retries: int
+    connect_retries_interval: int
 
 
 @click.command()
 @click.pass_context
 def init(ctx: click.Context) -> None:
-    Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"], cluster=ctx.obj["cluster"]).init()
+    Migrator(
+        database_url=ctx.obj["url"],
+        migrations_dir=ctx.obj["path"],
+        cluster=ctx.obj["cluster"],
+        connect_retries=ctx.obj["connect_retries"],
+        connect_retries_interval=ctx.obj["connect_retries_interval"],
+    ).init()
 
 
 @click.command()
@@ -44,7 +52,13 @@ def up(
     allow_dirty: bool,
 ) -> None:
     cluster = ctx.obj["cluster"]
-    migrator = Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"], cluster=cluster)
+    migrator = Migrator(
+        database_url=ctx.obj["url"],
+        migrations_dir=ctx.obj["path"],
+        cluster=cluster,
+        connect_retries=ctx.obj["connect_retries"],
+        connect_retries_interval=ctx.obj["connect_retries_interval"],
+    )
     if dry_run:
         migrator.up(n=number, dry_run=True, allow_dirty=allow_dirty)
         return
@@ -74,7 +88,13 @@ def up(
 @click.pass_context
 def rollback(ctx: click.Context, number: int, lock: bool, lock_ttl: int, lock_retry: int, dry_run: bool) -> None:
     cluster = ctx.obj["cluster"]
-    migrator = Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"], cluster=cluster)
+    migrator = Migrator(
+        database_url=ctx.obj["url"],
+        migrations_dir=ctx.obj["path"],
+        cluster=cluster,
+        connect_retries=ctx.obj["connect_retries"],
+        connect_retries_interval=ctx.obj["connect_retries_interval"],
+    )
     if dry_run:
         migrator.rollback(number=number, dry_run=True)
         return
@@ -92,7 +112,11 @@ def rollback(ctx: click.Context, number: int, lock: bool, lock_ttl: int, lock_re
 @click.pass_context
 def show(ctx: click.Context, show_all: bool) -> None:
     output, warning = Migrator(
-        database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"], cluster=ctx.obj["cluster"]
+        database_url=ctx.obj["url"],
+        migrations_dir=ctx.obj["path"],
+        cluster=ctx.obj["cluster"],
+        connect_retries=ctx.obj["connect_retries"],
+        connect_retries_interval=ctx.obj["connect_retries_interval"],
     ).show_migrations(show_all=show_all)
     click.echo(output)
     if warning:
@@ -109,14 +133,24 @@ def show(ctx: click.Context, show_all: bool) -> None:
 )
 def new(ctx: click.Context, name: str) -> None:
     Migrator(
-        database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"], cluster=ctx.obj["cluster"]
+        database_url=ctx.obj["url"],
+        migrations_dir=ctx.obj["path"],
+        cluster=ctx.obj["cluster"],
+        connect_retries=ctx.obj["connect_retries"],
+        connect_retries_interval=ctx.obj["connect_retries_interval"],
     ).create_new_migration(name=name)
 
 
 @click.command()
 @click.pass_context
 def repair(ctx: click.Context) -> None:
-    migrator = Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"], cluster=ctx.obj["cluster"])
+    migrator = Migrator(
+        database_url=ctx.obj["url"],
+        migrations_dir=ctx.obj["path"],
+        cluster=ctx.obj["cluster"],
+        connect_retries=ctx.obj["connect_retries"],
+        connect_retries_interval=ctx.obj["connect_retries_interval"],
+    )
     mismatches = migrator.validate_checksums()
     if not mismatches:
         click.echo("Nothing to repair. All checksums are valid.")
@@ -136,7 +170,13 @@ def repair(ctx: click.Context) -> None:
 @click.pass_context
 def force_unlock(ctx: click.Context) -> None:
     cluster = ctx.obj["cluster"]
-    migrator = Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"], cluster=cluster)
+    migrator = Migrator(
+        database_url=ctx.obj["url"],
+        migrations_dir=ctx.obj["path"],
+        cluster=cluster,
+        connect_retries=ctx.obj["connect_retries"],
+        connect_retries_interval=ctx.obj["connect_retries_interval"],
+    )
     lock = MigrationLock(client=migrator.ch_client, db=migrator.get_db_name(), cluster=cluster)
     lock.force_release()
     click.echo("Lock forcefully released.")
@@ -146,7 +186,13 @@ def force_unlock(ctx: click.Context) -> None:
 @click.pass_context
 def lock_info(ctx: click.Context) -> None:
     cluster = ctx.obj["cluster"]
-    migrator = Migrator(database_url=ctx.obj["url"], migrations_dir=ctx.obj["path"], cluster=cluster)
+    migrator = Migrator(
+        database_url=ctx.obj["url"],
+        migrations_dir=ctx.obj["path"],
+        cluster=cluster,
+        connect_retries=ctx.obj["connect_retries"],
+        connect_retries_interval=ctx.obj["connect_retries_interval"],
+    )
     ml = MigrationLock(client=migrator.ch_client, db=migrator.get_db_name(), cluster=cluster)
     info = ml.get_lock_info()
     if info is None:
@@ -193,8 +239,19 @@ def lock_info(ctx: click.Context) -> None:
     default="",
     required=False,
 )
+@click.option("--connect-retries", type=int, default=0, help="Max retries when connecting to ClickHouse.")
+@click.option("--connect-retries-interval", type=int, default=1, help="Seconds between connection retries.")
 @click.pass_context
-def main(ctx: click.Context, url: str, path: str, verbose: bool, quiet: bool, cluster: str) -> None:
+def main(
+    ctx: click.Context,
+    url: str,
+    path: str,
+    verbose: bool,
+    quiet: bool,
+    cluster: str,
+    connect_retries: int,
+    connect_retries_interval: int,
+) -> None:
     if verbose:
         level = logging.DEBUG
     elif quiet:
@@ -207,6 +264,8 @@ def main(ctx: click.Context, url: str, path: str, verbose: bool, quiet: bool, cl
         url=url,
         path=path,
         cluster=cluster,
+        connect_retries=connect_retries,
+        connect_retries_interval=connect_retries_interval,
     )
 
 
