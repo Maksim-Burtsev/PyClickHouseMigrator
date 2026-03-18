@@ -2,16 +2,20 @@ import logging
 import typing as t
 
 import click
+from dotenv import load_dotenv
 
 from py_clickhouse_migrator import Migrator
 from py_clickhouse_migrator.lock import MigrationLock
+from py_clickhouse_migrator.migrator import DEFAULT_MIGRATIONS_DIR
+
+load_dotenv()
 
 logger = logging.getLogger("py_clickhouse_migrator")
 
 
 class ContextObj(t.TypedDict):
     url: str
-    path: str | None
+    path: str
     cluster: str
     connect_retries: int
     connect_retries_interval: int
@@ -207,16 +211,16 @@ def lock_info(ctx: click.Context) -> None:
 @click.option(
     "--url",
     type=str,
-    help="ClickHouse url.\ntExample: clickhouse://default@127.0.0.1:9000/default",
+    help="ClickHouse url. Example: clickhouse://default@127.0.0.1:9000/default",
     default="",
-    required=False,
+    envvar="CLICKHOUSE_MIGRATE_URL",
 )
 @click.option(
     "--path",
     type=str,
-    help="Path to migrations directory.\nDefault: ./db/migrations",
-    default=None,
-    required=False,
+    help="Path to migrations directory. Default: ./db/migrations",
+    default=DEFAULT_MIGRATIONS_DIR,
+    envvar="CLICKHOUSE_MIGRATE_DIR",
 )
 @click.option(
     "--verbose",
@@ -237,10 +241,22 @@ def lock_info(ctx: click.Context) -> None:
     type=str,
     help="ClickHouse cluster name for ON CLUSTER DDL and replicated service tables.",
     default="",
-    required=False,
+    envvar="CLICKHOUSE_MIGRATE_CLUSTER",
 )
-@click.option("--connect-retries", type=int, default=0, help="Max retries when connecting to ClickHouse.")
-@click.option("--connect-retries-interval", type=int, default=1, help="Seconds between connection retries.")
+@click.option(
+    "--connect-retries",
+    type=int,
+    default=0,
+    envvar="CLICKHOUSE_MIGRATE_CONNECT_RETRIES",
+    help="Max retries when connecting to ClickHouse.",
+)
+@click.option(
+    "--connect-retries-interval",
+    type=int,
+    default=1,
+    envvar="CLICKHOUSE_MIGRATE_CONNECT_RETRIES_INTERVAL",
+    help="Seconds between connection retries.",
+)
 @click.pass_context
 def main(
     ctx: click.Context,

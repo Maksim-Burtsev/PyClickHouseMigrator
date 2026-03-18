@@ -19,7 +19,6 @@ from py_clickhouse_migrator.migrator import (
     MissingDatabaseUrlError,
 )
 
-from tests.conftest import DB_URL
 
 from tests.helpers import MIGRATION_FILENAME_REGEX, create_test_migration, table_exists
 
@@ -692,17 +691,3 @@ def test_migrator_cluster_param_empty_by_default(ch_client: Client, test_db: str
     migrator = Migrator(database_url=test_db)
     assert migrator.cluster == ""
     ch_client.execute("DROP TABLE IF EXISTS db_migrations")
-
-
-@patch.object(Migrator, "check_migrations_table")
-def test_migrator_cluster_param_from_env(_mock: object, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("CLICKHOUSE_CLUSTER", "env_cluster")
-    migrator = Migrator(database_url=DB_URL)
-    assert migrator.cluster == "env_cluster"
-
-
-@patch.object(Migrator, "check_migrations_table")
-def test_migrator_cluster_param_init_overrides_env(_mock: object, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("CLICKHOUSE_CLUSTER", "env_cluster")
-    migrator = Migrator(database_url=DB_URL, cluster="explicit")
-    assert migrator.cluster == "explicit"

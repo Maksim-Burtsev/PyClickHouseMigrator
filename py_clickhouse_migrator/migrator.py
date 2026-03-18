@@ -10,9 +10,6 @@ from typing import NamedTuple
 import click
 from clickhouse_driver import Client
 from clickhouse_driver.errors import ServerException
-from dotenv import load_dotenv
-
-load_dotenv()
 
 logger = logging.getLogger("py_clickhouse_migrator")
 
@@ -80,22 +77,20 @@ class Migrator(object):
     def __init__(
         self,
         database_url: str = "",
-        migrations_dir: str = "",
+        migrations_dir: str = DEFAULT_MIGRATIONS_DIR,
         cluster: str = "",
         connect_retries: int = 0,
         connect_retries_interval: int = 1,
     ) -> None:
-        self.database_url: str = database_url or os.getenv("DATABASE_URL", "")
-        if not self.database_url:
+        if not database_url:
             raise MissingDatabaseUrlError(
-                "ClickHouse url was not provided.\n.env variable 'DATABASE_URL' or param --url is missing."
+                "ClickHouse url was not provided.\nUse --url option or set CLICKHOUSE_MIGRATE_URL environment variable."
             )
-        self.migrations_dir: str = migrations_dir or os.getenv("CLICKHOUSE_MIGRATE_DIR", DEFAULT_MIGRATIONS_DIR)
-        self.cluster: str = cluster or os.getenv("CLICKHOUSE_CLUSTER", "")
-        self._connect_retries: int = connect_retries or int(os.getenv("CLICKHOUSE_CONNECT_RETRIES", "0"))
-        self._connect_retries_interval: int = connect_retries_interval or int(
-            os.getenv("CLICKHOUSE_CONNECT_RETRIES_INTERVAL", "1")
-        )
+        self.database_url: str = database_url
+        self.migrations_dir: str = migrations_dir
+        self.cluster: str = cluster
+        self._connect_retries: int = connect_retries
+        self._connect_retries_interval: int = connect_retries_interval
         self._settings: ClickHouseSettings = _CLUSTER_SETTINGS.copy() if self.cluster else {}
         self.ch_client: Client = Client.from_url(database_url)
         self.health_check()
