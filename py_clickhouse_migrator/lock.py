@@ -59,6 +59,16 @@ class LockInfo:
 
 
 class MigrationLock:
+    """Distributed advisory lock for safe concurrent migrations.
+
+    Args:
+        ttl: Lock expiration time in seconds.
+        retry_count: Number of acquire retries when lock is held.
+        retry_delay: Seconds between acquire retries.
+        cluster: ClickHouse cluster name for replicated lock table.
+
+    """
+
     _LOCK_TABLE = "_migrations_lock"
     _LOCK_ID = "migration"
 
@@ -119,6 +129,13 @@ class MigrationLock:
         return verified
 
     def acquire(self, retry_count: int = 0, retry_delay: float = 1.0) -> None:
+        """Acquire the migration lock.
+
+        Args:
+            retry_count: Number of retries if lock is already held.
+            retry_delay: Seconds between retries.
+
+        """
         for attempt in range(retry_count + 1):
             lock_info = self._get_active_lock()
             if lock_info is None:
@@ -152,6 +169,7 @@ class MigrationLock:
         )
 
     def release(self) -> None:
+        """Release the lock held by this instance."""
         now = dt.datetime.now(tz=dt.timezone.utc)
         self._client.execute(
             f"INSERT INTO {self._db}.{self._LOCK_TABLE} (lock_id, locked_by, locked_at, expires_at, is_locked) VALUES",
@@ -161,6 +179,7 @@ class MigrationLock:
         logger.debug("Lock released by %s", self._locked_by)
 
     def force_release(self) -> None:
+        """Release the lock regardless of who holds it."""
         now = dt.datetime.now(tz=dt.timezone.utc)
         self._client.execute(
             f"INSERT INTO {self._db}.{self._LOCK_TABLE} (lock_id, locked_by, locked_at, expires_at, is_locked) VALUES",
@@ -170,9 +189,11 @@ class MigrationLock:
         logger.info("Lock forcefully released.")
 
     def is_locked(self) -> bool:
+        """Check whether the migration lock is currently held."""
         return self._get_active_lock() is not None
 
     def get_lock_info(self) -> LockInfo | None:
+        """Return info about the active lock, or None if unlocked."""
         return self._get_active_lock()
 
     def _get_active_lock(self) -> LockInfo | None:

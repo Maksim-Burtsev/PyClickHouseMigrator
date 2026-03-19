@@ -78,6 +78,15 @@ class Migration:
 
 
 class Migrator(object):
+    """ClickHouse schema migration manager.
+
+    Args:
+        cluster: ClickHouse cluster name for replicated operations.
+        connect_retries: Number of connection retry attempts on startup.
+        connect_retries_interval: Seconds between connection retries.
+
+    """
+
     def __init__(
         self,
         database_url: str = "",
@@ -121,6 +130,7 @@ class Migrator(object):
         self.ch_client.execute(migrator_table, settings=self._settings)
 
     def init(self) -> None:
+        """Create the migrations directory and ensure the database exists."""
         db_name: str = self.get_db_name()
         if db_name != "default":
             self.ch_client.execute(f"CREATE DATABASE IF NOT EXISTS {db_name}")
@@ -170,6 +180,14 @@ class Migrator(object):
         )
 
     def up(self, n: int | None = None, dry_run: bool = False, allow_dirty: bool = False) -> None:
+        """Apply pending migrations.
+
+        Args:
+            n: Maximum number of migrations to apply. All pending if None.
+            dry_run: Print SQL without executing.
+            allow_dirty: Skip checksum validation for modified files.
+
+        """
         self.check_integrity(allow_dirty=allow_dirty)
         migrations: list[Migration] = self.get_migrations_for_apply(n)
         if not migrations:
@@ -189,6 +207,7 @@ class Migrator(object):
             logger.info("%s applied [✔]", migration.name)
 
     def rollback(self, number: int = 1, dry_run: bool = False) -> None:
+        """Rollback applied migrations in reverse order."""
         migrations: list[Migration] = self.get_migrations_for_rollback(number=number)
         for migration in migrations:
             if dry_run:
@@ -277,6 +296,7 @@ class Migrator(object):
         return filename
 
     def create_new_migration(self, name: str = "") -> str:
+        """Create a new migration file from template."""
         filepath: str = f"{self.migrations_dir}/{self.get_new_migration_filename(name)}"
         try:
             with open(filepath, "w") as f:
@@ -323,6 +343,7 @@ class Migrator(object):
         return mismatches
 
     def repair(self) -> list[str]:
+        """Update stored checksums to match current migration files."""
         mismatches = self.validate_checksums()
         if not mismatches:
             logger.info("Nothing to repair.")
@@ -342,6 +363,7 @@ class Migrator(object):
         return repaired
 
     def show_migrations(self, show_all: bool = False) -> tuple[str, str]:
+        """Return formatted migration status and integrity warnings."""
         applied_names = self.get_applied_migrations_names()[::-1]
         unapplied_names = self.get_unapplied_migration_names()
         total_applied = len(applied_names)
