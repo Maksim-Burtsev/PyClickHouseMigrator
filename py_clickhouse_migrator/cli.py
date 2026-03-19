@@ -1,4 +1,5 @@
 import logging
+from importlib.metadata import version
 from typing import Final
 import typing as t
 
@@ -233,6 +234,10 @@ def lock_info(ctx: click.Context) -> None:
 
 
 @click.group(cls=SafeGroup)
+@click.version_option(
+    version=version("py-clickhouse-migrator"),
+    prog_name="py-clickhouse-migrator",
+)
 @click.option(
     "--url",
     type=str,
