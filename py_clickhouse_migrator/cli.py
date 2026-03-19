@@ -3,8 +3,6 @@ from typing import Final
 import typing as t
 
 import click
-from dotenv import load_dotenv
-
 from py_clickhouse_migrator import Migrator
 from py_clickhouse_migrator.lock import LockError, MigrationLock
 from py_clickhouse_migrator.migrator import (
@@ -16,8 +14,6 @@ from py_clickhouse_migrator.migrator import (
     MigrationDirectoryNotFoundError,
     MissingDatabaseUrlError,
 )
-
-load_dotenv()
 
 logger = logging.getLogger("py_clickhouse_migrator")
 
