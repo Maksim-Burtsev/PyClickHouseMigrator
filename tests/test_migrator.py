@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import shutil
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import click
 import pytest
@@ -12,6 +12,7 @@ from clickhouse_driver import Client
 from py_clickhouse_migrator.migrator import (
     DEFAULT_MIGRATIONS_DIR,
     ClickHouseServerIsNotHealthyError,
+    DatabaseNotFoundError,
     InvalidMigrationError,
     Migration,
     MigrationDirectoryNotFoundError,
@@ -61,21 +62,11 @@ def test_init_base(migrator: Migrator, ch_client: Client) -> None:
     ch_client.execute("DROP TABLE IF EXISTS db_migrations")
 
 
-def test_init_with_database_creation(test_db: str, ch_client: Client) -> None:
-    ch_client.execute("DROP TABLE IF EXISTS default.db_migrations")
-    assert not table_exists(ch_client, "db_migrations") or True  # might exist from other tests
-
-    default_db_url: str = test_db.rsplit("/", 1)[0] + "/default"  # switch db from test to default
-    migrator = Migrator(default_db_url)
-    migrator.init()
-
-    result = ch_client.execute(
-        "SELECT count() FROM system.tables WHERE database = 'default' AND name = 'db_migrations'"
-    )
-    assert result[0][0] > 0
-
-    # clean
-    ch_client.execute("DROP TABLE IF EXISTS default.db_migrations")
+def test_nonexistent_database_raises_error() -> None:
+    """Migrator should fail with clear error if database doesn't exist."""
+    bad_url = "clickhouse://default@localhost:19000/this_db_does_not_exist"
+    with pytest.raises(DatabaseNotFoundError, match="does not exist"):
+        Migrator(database_url=bad_url)
 
 
 def test_init_with_invalid_database_url(test_db: str) -> None:
@@ -648,6 +639,61 @@ def test_show_migrations_all_flag(migrator: Migrator, migrator_init: None, ch_cl
     # clean
     for i in range(7):
         ch_client.execute(f"DROP TABLE IF EXISTS t_{i}")
+
+
+def test_get_db_name_with_query_params() -> None:
+    """get_db_name() should strip query parameters from the URL."""
+    with (
+        patch("py_clickhouse_migrator.migrator.Client.from_url", return_value=MagicMock()),
+        patch.object(Migrator, "check_migrations_table"),
+    ):
+        migrator = Migrator(database_url="clickhouse://default@localhost:9000/mydb?secure=1&timeout=30")
+    assert migrator.get_db_name() == "mydb"
+
+
+def test_show_migrations_no_applied(migrator: Migrator, migrator_init: None) -> None:
+    """show_migrations with zero applied migrations should show 'none'."""
+    output, warning = migrator.show_migrations()
+    plain = click.unstyle(output)
+    assert "none" in plain
+    assert "Applied: 0" in plain
+    assert warning == ""
+
+
+def test_show_migrations_with_pending(migrator: Migrator, migrator_init: None) -> None:
+    """show_migrations should list pending migrations."""
+    create_test_migration(
+        name="test_pending",
+        up="CREATE TABLE IF NOT EXISTS test_pending (id Int32) Engine=MergeTree() ORDER BY id;",
+        rollback="DROP TABLE IF EXISTS test_pending",
+        migrator=migrator,
+    )
+
+    result = migrator.show_migrations()
+    plain = click.unstyle(result.output)
+    lines = plain.splitlines()
+
+    pending_items = [line for line in lines if "[ ]" in line]
+    assert len(pending_items) == 1
+    assert "test_pending" in pending_items[0]
+
+    assert any(line.strip() == "Applied: 0 | Pending: 1" for line in lines)
+    assert result.warning == ""
+
+
+def test_get_migrations_for_apply_unloadable_file(migrator: Migrator, migrator_init: None) -> None:
+    """When importlib cannot create a spec, get_migrations_for_apply should raise InvalidMigrationError."""
+    filename = "20990101000000_bad.py"
+    filepath = f"{DEFAULT_MIGRATIONS_DIR}/{filename}"
+    os.makedirs(DEFAULT_MIGRATIONS_DIR, exist_ok=True)
+    with open(filepath, "w") as f:
+        f.write("# dummy")
+
+    with (
+        patch("py_clickhouse_migrator.migrator.importlib.util.spec_from_file_location", return_value=None),
+        pytest.raises(InvalidMigrationError, match="Cannot load migration"),
+    ):
+        migrator.get_migrations_for_apply()
 
 
 @patch.object(Migrator, "check_migrations_table")

@@ -18,6 +18,7 @@ SQL = str
 ClickHouseSettings = dict[str, str | int]
 
 _SQL_IDENTIFIER_RE: re.Pattern[str] = re.compile(r"[a-zA-Z_][a-zA-Z0-9_]*\Z")  # cluster name, db name
+_UNKNOWN_DATABASE_CODE = 81
 _MIGRATION_NAME_RE: re.Pattern[str] = re.compile(r"[a-zA-Z0-9_]+\Z")  # migration name suffix in filename
 
 _CLUSTER_SETTINGS: ClickHouseSettings = {
@@ -51,6 +52,9 @@ class InvalidMigrationError(Exception): ...
 class MissingDatabaseUrlError(Exception): ...
 
 
+class DatabaseNotFoundError(Exception): ...
+
+
 class ChecksumMismatchError(Exception): ...
 
 
@@ -58,6 +62,11 @@ class ChecksumMismatch(NamedTuple):
     name: str
     stored: str
     actual: str
+
+
+class ShowMigrationsResult(NamedTuple):
+    output: str
+    warning: str
 
 
 def normalize_content(content: str) -> str:
@@ -130,10 +139,7 @@ class Migrator(object):
         self.ch_client.execute(migrator_table, settings=self._settings)
 
     def init(self) -> None:
-        """Create the migrations directory and ensure the database exists."""
-        db_name: str = self.get_db_name()
-        if db_name != "default":
-            self.ch_client.execute(f"CREATE DATABASE IF NOT EXISTS {db_name}")
+        """Create the migrations directory."""
         self.create_migrations_directory()
         logger.info("Migrations directory %s successfully initialized.", self.migrations_dir)
 
@@ -143,6 +149,13 @@ class Migrator(object):
                 self.ch_client.execute("SELECT 1")
                 return
             except Exception as exc:
+                if isinstance(exc, ServerException) and exc.code == _UNKNOWN_DATABASE_CODE:
+                    db_name = self.get_db_name()
+                    raise DatabaseNotFoundError(
+                        f"Database '{db_name}' does not exist.\n"
+                        f"Create it manually before running migrations:\n"
+                        f"  CREATE DATABASE {db_name}"
+                    ) from exc
                 if attempt == self._connect_retries:
                     raise ClickHouseServerIsNotHealthyError(f"ClickHouse server is not healthy: {exc}.") from exc
                 logger.warning(
@@ -362,7 +375,7 @@ class Migrator(object):
             repaired.append(name)
         return repaired
 
-    def show_migrations(self, show_all: bool = False) -> tuple[str, str]:
+    def show_migrations(self, show_all: bool = False) -> ShowMigrationsResult:
         """Return formatted migration status and integrity warnings."""
         applied_names = self.get_applied_migrations_names()[::-1]
         unapplied_names = self.get_unapplied_migration_names()
@@ -433,4 +446,4 @@ class Migrator(object):
                     issue_lines.append("  " + click.style(f"{name}: checksum mismatch", fg="yellow"))
             warning = "\n".join(issue_lines)
 
-        return "\n".join(lines), warning
+        return ShowMigrationsResult("\n".join(lines), warning)
