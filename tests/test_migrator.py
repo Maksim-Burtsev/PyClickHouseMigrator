@@ -51,13 +51,11 @@ def test_db_migrations_table_creation(ch_client: Client, test_db: str) -> None:
 
 
 def test_init_base(migrator: Migrator, ch_client: Client) -> None:
-    assert not os.path.exists("./db/schema.sql")
     assert not os.path.exists(DEFAULT_MIGRATIONS_DIR)
 
     migrator.init()
 
     assert os.path.exists(DEFAULT_MIGRATIONS_DIR)
-    assert os.path.exists("./db/schema.sql")
 
     # clean
     ch_client.execute("DROP TABLE IF EXISTS db_migrations")
@@ -491,34 +489,6 @@ def test_delete_migration(migrator: Migrator, ch_client: Client, migrator_init: 
     migrator.delete_migration("test.sql")
 
     assert not ch_client.execute("SELECT * FROM db_migrations")
-
-
-def test_save_current_schema(migrator: Migrator, ch_client: Client) -> None:
-    assert not os.path.exists("./db/schema.sql")
-
-    migrator.init()
-
-    assert os.path.exists("./db/schema.sql")
-    with open("./db/schema.sql") as f:
-        assert (
-            f.read()
-            == """---- Database schema ----
-
-CREATE TABLE IF NOT EXISTS test.db_migrations
-(
-    `name` String,
-    `up` String,
-    `rollback` String,
-    `dt` DateTime64(3) DEFAULT now(),
-    `checksum` String DEFAULT ''
-)
-ENGINE = MergeTree
-ORDER BY dt
-SETTINGS index_granularity = 8192;"""
-        )
-
-    # clean
-    ch_client.execute("DROP TABLE IF EXISTS db_migrations")
 
 
 def test_apply_invalid_migration(migrator: Migrator, ch_client: Client) -> None:

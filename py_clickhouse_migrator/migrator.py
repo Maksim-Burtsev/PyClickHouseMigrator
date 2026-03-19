@@ -125,7 +125,6 @@ class Migrator(object):
         if db_name != "default":
             self.ch_client.execute(f"CREATE DATABASE IF NOT EXISTS {db_name}")
         self.create_migrations_directory()
-        self.save_current_schema()
         logger.info("Migrations directory %s successfully initialized.", self.migrations_dir)
 
     def health_check(self) -> None:
@@ -188,8 +187,6 @@ class Migrator(object):
                 checksum=migration.checksum,
             )
             logger.info("%s applied [✔]", migration.name)
-        if not dry_run:
-            self.save_current_schema()
 
     def rollback(self, number: int = 1, dry_run: bool = False) -> None:
         migrations: list[Migration] = self.get_migrations_for_rollback(number=number)
@@ -205,8 +202,6 @@ class Migrator(object):
                 name=migration.name,
             )
             logger.info("%s rolled back [✔].", migration.name)
-        if not dry_run:
-            self.save_current_schema()
 
     def apply_migration(self, query: SQL) -> None:
         queries: list[SQL] = query.split(";")
@@ -293,18 +288,6 @@ class Migrator(object):
         logger.info("Migration %s has been created.", filepath)
 
         return filepath
-
-    def save_current_schema(self) -> None:
-        tables: list[tuple[str]] = self.ch_client.execute("SHOW TABLES")
-        result: str = "---- Database schema ----\n\n"
-        for table in tables:
-            schema: list[tuple[str]] = self.ch_client.execute(f"SHOW CREATE TABLE {table[0]}")
-            result += f"{schema[0][0]};\n\n"
-        result = result.replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS")
-        schema_path: str = f"{self.migrations_dir.rsplit('/', 1)[0]}/schema.sql"
-        with open(schema_path, "w") as f:
-            f.write(result[:-2])
-        logger.info("Writing schema %s", schema_path)
 
     def save_applied_migration(self, name: str, up: SQL, rollback: SQL, checksum: str = "") -> None:
         self.ch_client.execute(
