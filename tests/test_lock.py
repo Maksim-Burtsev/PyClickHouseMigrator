@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import logging
 from collections.abc import Generator
 from unittest.mock import MagicMock, patch
 
@@ -160,6 +161,58 @@ def test_lock_cluster_param_stored() -> None:
 def test_lock_cluster_param_empty_by_default(ch_client: Client) -> None:
     ml = MigrationLock(client=ch_client, db=DB)
     assert ml._cluster == ""
+    ch_client.execute(f"DROP TABLE IF EXISTS {DB}.{MigrationLock._LOCK_TABLE}")
+
+
+def test_context_manager_release_failure(ch_client: Client, caplog: pytest.LogCaptureFixture) -> None:
+    """If release() raises inside __exit__, the exception is logged, not propagated."""
+    lock = MigrationLock(client=ch_client, db=DB, ttl=300)
+    lock.acquire()
+
+    with (
+        patch.object(lock, "release", side_effect=RuntimeError("connection lost")),
+        caplog.at_level(logging.ERROR, logger="py_clickhouse_migrator"),
+    ):
+        lock.__exit__(None, None, None)
+
+    assert "Failed to release migration lock" in caplog.text
+    # force cleanup — release was mocked so lock row still exists
+    ch_client.execute(f"DROP TABLE IF EXISTS {DB}.{MigrationLock._LOCK_TABLE}")
+
+
+def test_try_acquire_race_condition(lock: MigrationLock, ch_client: Client) -> None:
+    """When another process grabs the lock between insert and verify, _try_acquire returns holder info."""
+    # Simulate: after our insert, _get_active_lock returns someone else's lock
+    other_info = LockInfo(locked_by="other:999", locked_at=dt.datetime.now(), expires_at=dt.datetime.now())
+    with patch.object(lock, "_get_active_lock", return_value=other_info):
+        result = lock._try_acquire()
+
+    assert result is not None
+    assert result.locked_by == "other:999"
+    ch_client.execute(f"DROP TABLE IF EXISTS {DB}.{MigrationLock._LOCK_TABLE}")
+
+
+def test_acquire_race_on_try_acquire(ch_client: Client) -> None:
+    """When lock appears free but _try_acquire returns a holder, acquire should raise LockError."""
+    lock = MigrationLock(client=ch_client, db=DB, ttl=300)
+    other_info = LockInfo(locked_by="other:999", locked_at=dt.datetime.now(), expires_at=dt.datetime.now())
+
+    call_count = 0
+
+    def mock_get_active_lock() -> LockInfo | None:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return None  # first check: lock appears free
+        return other_info  # verify after insert: someone else holds it
+
+    with (
+        patch.object(lock, "_get_active_lock", side_effect=mock_get_active_lock),
+        patch.object(lock, "_try_acquire", return_value=other_info),
+        pytest.raises(LockError),
+    ):
+        lock.acquire()
+
     ch_client.execute(f"DROP TABLE IF EXISTS {DB}.{MigrationLock._LOCK_TABLE}")
 
 
