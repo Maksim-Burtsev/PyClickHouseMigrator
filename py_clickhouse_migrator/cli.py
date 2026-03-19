@@ -1,16 +1,45 @@
 import logging
+from typing import Final
 import typing as t
 
 import click
 from dotenv import load_dotenv
 
 from py_clickhouse_migrator import Migrator
-from py_clickhouse_migrator.lock import MigrationLock
-from py_clickhouse_migrator.migrator import DEFAULT_MIGRATIONS_DIR
+from py_clickhouse_migrator.lock import LockError, MigrationLock
+from py_clickhouse_migrator.migrator import (
+    ChecksumMismatchError,
+    ClickHouseServerIsNotHealthyError,
+    DatabaseNotFoundError,
+    DEFAULT_MIGRATIONS_DIR,
+    InvalidMigrationError,
+    MigrationDirectoryNotFoundError,
+    MissingDatabaseUrlError,
+)
 
 load_dotenv()
 
 logger = logging.getLogger("py_clickhouse_migrator")
+
+
+_HANDLED_EXCEPTIONS: Final[tuple[type[Exception], ...]] = (
+    LockError,
+    ChecksumMismatchError,
+    InvalidMigrationError,
+    ClickHouseServerIsNotHealthyError,
+    MissingDatabaseUrlError,
+    MigrationDirectoryNotFoundError,
+    DatabaseNotFoundError,
+)
+
+
+class SafeGroup(click.Group):
+    def invoke(self, ctx: click.Context) -> None:
+        try:
+            super().invoke(ctx)
+        except _HANDLED_EXCEPTIONS as exc:
+            click.echo(click.style("Error: ", fg="red", bold=True) + str(exc), err=True)
+            ctx.exit(1)
 
 
 class ContextObj(t.TypedDict):
@@ -207,7 +236,7 @@ def lock_info(ctx: click.Context) -> None:
         click.echo(f"Expires at: {info.expires_at:%Y-%m-%d %H:%M:%S}")
 
 
-@click.group()
+@click.group(cls=SafeGroup)
 @click.option(
     "--url",
     type=str,

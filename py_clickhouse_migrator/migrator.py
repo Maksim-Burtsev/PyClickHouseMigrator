@@ -6,7 +6,7 @@ import os
 import re
 import time
 from dataclasses import dataclass, field
-from typing import NamedTuple
+from typing import Final, NamedTuple
 
 import click
 from clickhouse_driver import Client
@@ -17,9 +17,9 @@ logger = logging.getLogger("py_clickhouse_migrator")
 SQL = str
 ClickHouseSettings = dict[str, str | int]
 
-_SQL_IDENTIFIER_RE: re.Pattern[str] = re.compile(r"[a-zA-Z_][a-zA-Z0-9_]*\Z")  # cluster name, db name
-_UNKNOWN_DATABASE_CODE = 81
-_MIGRATION_NAME_RE: re.Pattern[str] = re.compile(r"[a-zA-Z0-9_]+\Z")  # migration name suffix in filename
+_SQL_IDENTIFIER_RE: Final[re.Pattern[str]] = re.compile(r"[a-zA-Z_][a-zA-Z0-9_]*\Z")  # cluster name, db name
+_UNKNOWN_DATABASE_CODE: Final[int] = 81
+_MIGRATION_NAME_RE: Final[re.Pattern[str]] = re.compile(r"[a-zA-Z0-9_]+\Z")  # migration name suffix in filename
 
 _CLUSTER_SETTINGS: ClickHouseSettings = {
     "insert_quorum": "auto",
