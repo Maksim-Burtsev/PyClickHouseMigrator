@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Maksim-Burtsev/PyClickHouseMigrator/main/assets/logo.png" alt="PyClickHouseMigrator" width="200">
+  <img src="https://raw.githubusercontent.com/Maksim-Burtsev/PyClickHouseMigrator/master/assets/logo.png" alt="PyClickHouseMigrator" width="200">
 </p>
 
 # PyClickHouseMigrate
