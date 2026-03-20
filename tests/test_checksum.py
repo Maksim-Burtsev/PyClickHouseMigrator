@@ -66,7 +66,6 @@ def test_checksum_saved_on_apply(migrator: Migrator, migrator_init: None, ch_cli
         name="test_cksum",
         up="CREATE TABLE IF NOT EXISTS test_cksum (id Int32) Engine=MergeTree() ORDER BY id;",
         rollback="DROP TABLE IF EXISTS test_cksum",
-        migrator=migrator,
     )
     migrator.up()
 
@@ -87,7 +86,6 @@ def test_up_fails_on_checksum_mismatch(migrator: Migrator, migrator_init: None, 
         name="test_mismatch",
         up="CREATE TABLE IF NOT EXISTS test_mismatch (id Int32) Engine=MergeTree() ORDER BY id;",
         rollback="DROP TABLE IF EXISTS test_mismatch",
-        migrator=migrator,
     )
     migrator.up()
 
@@ -114,7 +112,6 @@ def test_up_allow_dirty_skips_validation(migrator: Migrator, migrator_init: None
         name="test_dirty",
         up="CREATE TABLE IF NOT EXISTS test_dirty (id Int32) Engine=MergeTree() ORDER BY id;",
         rollback="DROP TABLE IF EXISTS test_dirty",
-        migrator=migrator,
     )
     migrator.up()
 
@@ -147,7 +144,6 @@ def test_up_skips_validation_for_empty_checksum(migrator: Migrator, migrator_ini
         name="test_after_legacy",
         up="CREATE TABLE IF NOT EXISTS test_legacy (id Int32) Engine=MergeTree() ORDER BY id;",
         rollback="DROP TABLE IF EXISTS test_legacy",
-        migrator=migrator,
     )
 
     migrator.up()  # should not raise
@@ -162,7 +158,6 @@ def test_validate_detects_missing_file(migrator: Migrator, migrator_init: None, 
         name="test_missing",
         up="CREATE TABLE IF NOT EXISTS test_missing (id Int32) Engine=MergeTree() ORDER BY id;",
         rollback="DROP TABLE IF EXISTS test_missing",
-        migrator=migrator,
     )
     migrator.up()
 
@@ -184,7 +179,6 @@ def test_validate_passes_when_no_changes(migrator: Migrator, migrator_init: None
         name="test_ok",
         up="CREATE TABLE IF NOT EXISTS test_ok (id Int32) Engine=MergeTree() ORDER BY id;",
         rollback="DROP TABLE IF EXISTS test_ok",
-        migrator=migrator,
     )
     migrator.up()
 
@@ -203,7 +197,6 @@ def test_repair_updates_checksum(migrator: Migrator, migrator_init: None, ch_cli
         name="test_repair",
         up="CREATE TABLE IF NOT EXISTS test_repair (id Int32) Engine=MergeTree() ORDER BY id;",
         rollback="DROP TABLE IF EXISTS test_repair",
-        migrator=migrator,
     )
     migrator.up()
 
@@ -235,7 +228,6 @@ def test_repair_nothing_to_fix(migrator: Migrator, migrator_init: None, ch_clien
         name="test_repair_ok",
         up="CREATE TABLE IF NOT EXISTS test_repair_ok (id Int32) Engine=MergeTree() ORDER BY id;",
         rollback="DROP TABLE IF EXISTS test_repair_ok",
-        migrator=migrator,
     )
     migrator.up()
 
@@ -251,7 +243,6 @@ def test_repair_skips_missing_files(migrator: Migrator, migrator_init: None, ch_
         name="test_repair_missing",
         up="CREATE TABLE IF NOT EXISTS test_repair_missing (id Int32) Engine=MergeTree() ORDER BY id;",
         rollback="DROP TABLE IF EXISTS test_repair_missing",
-        migrator=migrator,
     )
     migrator.up()
 
@@ -273,7 +264,6 @@ def test_show_clean_output(migrator: Migrator, migrator_init: None, ch_client: C
         name="test_clean",
         up="CREATE TABLE IF NOT EXISTS test_clean (id Int32) Engine=MergeTree() ORDER BY id;",
         rollback="DROP TABLE IF EXISTS test_clean",
-        migrator=migrator,
     )
     migrator.up()
 
@@ -295,7 +285,6 @@ def test_show_modified_suffix_and_warning(migrator: Migrator, migrator_init: Non
         name="test_show_mod",
         up="CREATE TABLE IF NOT EXISTS test_show_mod (id Int32) Engine=MergeTree() ORDER BY id;",
         rollback="DROP TABLE IF EXISTS test_show_mod",
-        migrator=migrator,
     )
     migrator.up()
 
@@ -327,7 +316,6 @@ def test_show_missing_suffix_and_warning(migrator: Migrator, migrator_init: None
         name="test_show_miss",
         up="CREATE TABLE IF NOT EXISTS test_show_miss (id Int32) Engine=MergeTree() ORDER BY id;",
         rollback="DROP TABLE IF EXISTS test_show_miss",
-        migrator=migrator,
     )
     migrator.up()
 
@@ -351,7 +339,6 @@ def test_show_head_without_issues(migrator: Migrator, migrator_init: None, ch_cl
         name="test_head_ok",
         up="CREATE TABLE IF NOT EXISTS test_head_ok (id Int32) Engine=MergeTree() ORDER BY id;",
         rollback="DROP TABLE IF EXISTS test_head_ok",
-        migrator=migrator,
     )
     migrator.up()
 
@@ -372,7 +359,6 @@ def test_show_truncated_list_still_warns(migrator: Migrator, migrator_init: None
             name=f"table_{i}",
             up=f"CREATE TABLE IF NOT EXISTS t_{i} (id Int32) Engine=MergeTree() ORDER BY id;",
             rollback=f"DROP TABLE IF EXISTS t_{i}",
-            migrator=migrator,
         )
     migrator.up()
 
@@ -407,13 +393,11 @@ def test_show_warning_plural(migrator: Migrator, migrator_init: None, ch_client:
         name="test_plural_1",
         up="CREATE TABLE IF NOT EXISTS test_plural_1 (id Int32) Engine=MergeTree() ORDER BY id;",
         rollback="DROP TABLE IF EXISTS test_plural_1",
-        migrator=migrator,
     )
     filename2 = create_test_migration(
         name="test_plural_2",
         up="CREATE TABLE IF NOT EXISTS test_plural_2 (id Int32) Engine=MergeTree() ORDER BY id;",
         rollback="DROP TABLE IF EXISTS test_plural_2",
-        migrator=migrator,
     )
     migrator.up()
 
@@ -447,7 +431,6 @@ def test_show_warning_stderr(migrator: Migrator, migrator_init: None, ch_client:
         name="test_stderr",
         up="CREATE TABLE IF NOT EXISTS test_stderr (id Int32) Engine=MergeTree() ORDER BY id;",
         rollback="DROP TABLE IF EXISTS test_stderr",
-        migrator=migrator,
     )
     migrator.up()
 
@@ -476,7 +459,6 @@ def test_show_head_modified_combo_color(migrator: Migrator, migrator_init: None,
         name="test_combo",
         up="CREATE TABLE IF NOT EXISTS test_combo (id Int32) Engine=MergeTree() ORDER BY id;",
         rollback="DROP TABLE IF EXISTS test_combo",
-        migrator=migrator,
     )
     migrator.up()
 

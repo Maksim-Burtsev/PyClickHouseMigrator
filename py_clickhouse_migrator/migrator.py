@@ -86,6 +86,42 @@ class Migration:
     checksum: str = field(default="")
 
 
+def create_migrations_dir(migrations_dir: str = DEFAULT_MIGRATIONS_DIR) -> None:
+    """Create the migrations directory if it doesn't exist."""
+    os.makedirs(migrations_dir, exist_ok=True)
+    logger.info("Migrations directory %s successfully initialized.", migrations_dir)
+
+
+def make_migration_filename(name: str = "") -> str:
+    """Generate a timestamped migration filename."""
+    if name and not _MIGRATION_NAME_RE.match(name):
+        raise ValueError(f"Invalid migration name: '{name}'. Use only letters, digits, and underscores.")
+    filename = dt.datetime.now().strftime("%Y%m%d%H%M%S")
+    if name:
+        filename += f"_{name}"
+    filename += ".py"
+    return filename
+
+
+def create_migration_file(migrations_dir: str = DEFAULT_MIGRATIONS_DIR, name: str = "") -> str:
+    """Create a new migration file from template. Returns the filepath."""
+    if not name:
+        logger.warning("Migration name is recommended: py-clickhouse-migrator new <name>")
+
+    filename = make_migration_filename(name)
+    filepath = os.path.join(migrations_dir, filename)
+    try:
+        with open(filepath, "w") as f:
+            f.write(MIGRATION_TEMPLATE)
+    except FileNotFoundError:
+        raise MigrationDirectoryNotFoundError(
+            f"Migration directory {migrations_dir} not found.\nMake sure you run 'init' first."
+        ) from None
+
+    logger.info("Migration %s has been created.", filepath)
+    return filepath
+
+
 class Migrator(object):
     """ClickHouse schema migration manager.
 
@@ -138,11 +174,6 @@ class Migrator(object):
         """
         self.ch_client.execute(migrator_table, settings=self._settings)
 
-    def init(self) -> None:
-        """Create the migrations directory."""
-        self.create_migrations_directory()
-        logger.info("Migrations directory %s successfully initialized.", self.migrations_dir)
-
     def health_check(self) -> None:
         for attempt in range(self._connect_retries + 1):
             try:
@@ -171,10 +202,6 @@ class Migrator(object):
         if "?" in db_name:
             db_name = db_name[: db_name.find("?")]
         return db_name
-
-    def create_migrations_directory(self) -> None:
-        if not os.path.exists(self.migrations_dir):
-            os.makedirs(self.migrations_dir)
 
     def check_integrity(self, allow_dirty: bool = False) -> None:
         mismatches = self.validate_checksums()
@@ -296,31 +323,6 @@ class Migrator(object):
                 settings=self._settings,
             )
         ]
-
-    def get_new_migration_filename(self, name: str = "") -> str:
-        if not name:
-            logger.warning("Migration name is recommended: py-clickhouse-migrator new <name>")
-        if name and not _MIGRATION_NAME_RE.match(name):
-            raise ValueError(f"Invalid migration name: '{name}'. Use only letters, digits, and underscores.")
-        filename: str = dt.datetime.now().strftime("%Y%m%d%H%M%S")
-        if name:
-            filename += f"_{name}"
-        filename += ".py"
-        return filename
-
-    def create_new_migration(self, name: str = "") -> str:
-        """Create a new migration file from template."""
-        filepath: str = f"{self.migrations_dir}/{self.get_new_migration_filename(name)}"
-        try:
-            with open(filepath, "w") as f:
-                f.write(MIGRATION_TEMPLATE)
-        except FileNotFoundError:
-            raise MigrationDirectoryNotFoundError(
-                f"Migration directory {self.migrations_dir} not found.\nMake sure you 'init' it."
-            ) from None
-        logger.info("Migration %s has been created.", filepath)
-
-        return filepath
 
     def save_applied_migration(self, name: str, up: SQL, rollback: SQL, checksum: str = "") -> None:
         self.ch_client.execute(

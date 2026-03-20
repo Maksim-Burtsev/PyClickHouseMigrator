@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import os
 from collections.abc import Generator
 from unittest.mock import MagicMock, patch
 
@@ -12,6 +13,7 @@ from click.testing import CliRunner
 from py_clickhouse_migrator.cli import main
 from py_clickhouse_migrator.lock import LockError, LockInfo
 from py_clickhouse_migrator.migrator import (
+    DEFAULT_MIGRATIONS_DIR,
     ChecksumMismatch,
     ChecksumMismatchError,
     ClickHouseServerIsNotHealthyError,
@@ -65,25 +67,55 @@ def test_quiet_flag(runner: CliRunner, mock_migrator: MagicMock) -> None:
 # --- init ---
 
 
-def test_cli_init(runner: CliRunner, mock_migrator: MagicMock) -> None:
-    result = runner.invoke(main, ["--url", FAKE_URL, "init"])
+def test_cli_init(runner: CliRunner, tmp_path: pytest.TempPathFactory) -> None:
+    path = str(tmp_path / "migrations")
+    result = runner.invoke(main, ["--path", path, "init"])
     assert result.exit_code == 0
-    mock_migrator.init.assert_called_once()
+    assert os.path.isdir(path)
+
+
+def test_cli_init_default_path(runner: CliRunner) -> None:
+    result = runner.invoke(main, ["init"])
+    assert result.exit_code == 0
+    assert os.path.isdir(DEFAULT_MIGRATIONS_DIR)
 
 
 # --- new ---
 
 
-def test_cli_new(runner: CliRunner, mock_migrator: MagicMock) -> None:
-    result = runner.invoke(main, ["--url", FAKE_URL, "new", "add_users"])
+def test_cli_new(runner: CliRunner, tmp_path: pytest.TempPathFactory) -> None:
+    path = str(tmp_path / "migrations")
+    os.makedirs(path)
+    result = runner.invoke(main, ["--path", path, "new", "add_users"])
     assert result.exit_code == 0
-    mock_migrator.create_new_migration.assert_called_once_with(name="add_users")
+    files = os.listdir(path)
+    assert len(files) == 1
+    assert files[0].endswith("_add_users.py")
 
 
-def test_cli_new_without_name(runner: CliRunner, mock_migrator: MagicMock) -> None:
-    result = runner.invoke(main, ["--url", FAKE_URL, "new"])
+def test_cli_new_without_name(runner: CliRunner, tmp_path: pytest.TempPathFactory) -> None:
+    path = str(tmp_path / "migrations")
+    os.makedirs(path)
+    result = runner.invoke(main, ["--path", path, "new"])
     assert result.exit_code == 0
-    mock_migrator.create_new_migration.assert_called_once_with(name="")
+    files = os.listdir(path)
+    assert len(files) == 1
+    assert files[0].endswith(".py")
+
+
+def test_cli_new_default_path(runner: CliRunner) -> None:
+    os.makedirs(DEFAULT_MIGRATIONS_DIR, exist_ok=True)
+    result = runner.invoke(main, ["new", "test_migration"])
+    assert result.exit_code == 0
+    files = os.listdir(DEFAULT_MIGRATIONS_DIR)
+    assert any(f.endswith("_test_migration.py") for f in files)
+
+
+def test_cli_new_missing_dir(runner: CliRunner, tmp_path: pytest.TempPathFactory) -> None:
+    path = str(tmp_path / "nonexistent")
+    result = runner.invoke(main, ["--path", path, "new", "test"])
+    assert result.exit_code == 1
+    assert "not found" in result.stderr
 
 
 # --- up ---

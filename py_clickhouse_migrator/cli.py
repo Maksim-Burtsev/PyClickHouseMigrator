@@ -14,6 +14,8 @@ from py_clickhouse_migrator.migrator import (
     InvalidMigrationError,
     MigrationDirectoryNotFoundError,
     MissingDatabaseUrlError,
+    create_migration_file,
+    create_migrations_dir,
 )
 
 logger = logging.getLogger("py_clickhouse_migrator")
@@ -50,13 +52,7 @@ class ContextObj(t.TypedDict):
 @click.command()
 @click.pass_context
 def init(ctx: click.Context) -> None:
-    Migrator(
-        database_url=ctx.obj["url"],
-        migrations_dir=ctx.obj["path"],
-        cluster=ctx.obj["cluster"],
-        connect_retries=ctx.obj["connect_retries"],
-        connect_retries_interval=ctx.obj["connect_retries_interval"],
-    ).init()
+    create_migrations_dir(migrations_dir=ctx.obj["path"])
 
 
 @click.command()
@@ -162,13 +158,7 @@ def show(ctx: click.Context, show_all: bool) -> None:
     required=False,
 )
 def new(ctx: click.Context, name: str) -> None:
-    Migrator(
-        database_url=ctx.obj["url"],
-        migrations_dir=ctx.obj["path"],
-        cluster=ctx.obj["cluster"],
-        connect_retries=ctx.obj["connect_retries"],
-        connect_retries_interval=ctx.obj["connect_retries_interval"],
-    ).create_new_migration(name=name)
+    create_migration_file(migrations_dir=ctx.obj["path"], name=name)
 
 
 @click.command()

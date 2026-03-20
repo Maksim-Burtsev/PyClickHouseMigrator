@@ -11,7 +11,7 @@ import pytest
 from clickhouse_driver import Client
 
 from py_clickhouse_migrator.lock import LockError, MigrationLock
-from py_clickhouse_migrator.migrator import Migrator
+from py_clickhouse_migrator.migrator import Migrator, create_migrations_dir
 
 from tests.helpers import create_test_migration, get_engine, table_exists
 
@@ -41,8 +41,8 @@ def clean_db_dir() -> Generator[None]:
 
 @pytest.fixture()
 def cluster_migrator(node1: Client) -> Generator[Migrator]:
+    create_migrations_dir()
     m = Migrator(database_url=NODE_1_URL, cluster=CLUSTER_NAME)
-    m.init()
     yield m
     node1.execute(f"DROP TABLE IF EXISTS db_migrations ON CLUSTER {CLUSTER_NAME} SYNC")
     node1.execute(f"DROP TABLE IF EXISTS _migrations_lock ON CLUSTER {CLUSTER_NAME} SYNC")
@@ -81,7 +81,6 @@ def test_migration_applied_on_node1_visible_on_node2(cluster_migrator: Migrator,
         name="cluster_test",
         up="SELECT 1",
         rollback="SELECT 1",
-        migrator=cluster_migrator,
     )
     cluster_migrator.up()
 
@@ -104,7 +103,6 @@ def test_migration_creates_table_on_both_nodes(cluster_migrator: Migrator, node1
             " ORDER BY id"
         ),
         rollback=f"DROP TABLE IF EXISTS test_user_table ON CLUSTER {CLUSTER_NAME} SYNC",
-        migrator=cluster_migrator,
     )
     cluster_migrator.up()
 
@@ -122,7 +120,6 @@ def test_rollback_on_node1_reflected_on_node2(cluster_migrator: Migrator, node2:
         name="cluster_rollback",
         up="SELECT 1",
         rollback="SELECT 1",
-        migrator=cluster_migrator,
     )
     cluster_migrator.up()
     cluster_migrator.rollback()
@@ -142,7 +139,6 @@ def test_migrator_on_node2_sees_node1_migrations(cluster_migrator: Migrator) -> 
         name="handoff_test",
         up="SELECT 1",
         rollback="SELECT 1",
-        migrator=cluster_migrator,
     )
     cluster_migrator.up()
 
@@ -188,7 +184,6 @@ def test_concurrent_pods_race_condition(cluster_migrator: Migrator) -> None:
         name="race_test",
         up="SELECT sleep(2)",
         rollback="SELECT 1",
-        migrator=cluster_migrator,
     )
 
     results: dict[str, Any] = {}

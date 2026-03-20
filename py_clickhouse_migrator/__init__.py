@@ -6,6 +6,9 @@ from .migrator import (
     Migrator,
     ShowMigrationsResult,
     compute_checksum,
+    create_migration_file,
+    create_migrations_dir,
+    make_migration_filename,
     normalize_content,
 )
 
@@ -19,5 +22,8 @@ __all__ = [
     "Migrator",
     "ShowMigrationsResult",
     "compute_checksum",
+    "create_migration_file",
+    "create_migrations_dir",
+    "make_migration_filename",
     "normalize_content",
 ]

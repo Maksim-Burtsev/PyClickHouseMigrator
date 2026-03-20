@@ -7,7 +7,7 @@ from collections.abc import Generator
 import pytest
 from clickhouse_driver import Client
 
-from py_clickhouse_migrator.migrator import Migrator
+from py_clickhouse_migrator.migrator import Migrator, create_migrations_dir
 
 from tests.helpers import create_test_migration, table_exists
 
@@ -40,7 +40,7 @@ def clean_db_dir() -> Generator[None]:
 
 @pytest.fixture(scope="function")
 def migrator_init(migrator: Migrator, ch_client: Client) -> Generator[None]:
-    migrator.init()
+    create_migrations_dir()
     assert table_exists(ch_client, "db_migrations")
 
     yield
@@ -54,7 +54,6 @@ def test_table_from_migration(migrator: Migrator, migrator_init: None, ch_client
         name="test_1",
         up="CREATE TABLE IF NOT EXISTS test_table (id Integer) Engine=MergeTree() ORDER BY id;",
         rollback="DROP TABLE IF EXISTS test_table",
-        migrator=migrator,
     )
     migrator.up()
 
@@ -69,19 +68,16 @@ def test_tables_from_migration(migrator: Migrator, migrator_init: None, ch_clien
         name="test_1",
         up="CREATE TABLE IF NOT EXISTS test_table_1 (id Integer) Engine=MergeTree() ORDER BY id;",
         rollback="DROP TABLE IF EXISTS test_table_1",
-        migrator=migrator,
     )
     filename_2: str = create_test_migration(
         name="test_2",
         up="CREATE TABLE IF NOT EXISTS test_table_2 (id String) Engine=MergeTree() ORDER BY id;",
         rollback="DROP TABLE IF EXISTS test_table_2",
-        migrator=migrator,
     )
     filename_3: str = create_test_migration(
         name="test_3",
         up="CREATE TABLE IF NOT EXISTS test_table_3 (id String) Engine=MergeTree() ORDER BY id;",
         rollback="DROP TABLE IF EXISTS test_table_3",
-        migrator=migrator,
     )
     migrator.up()
 

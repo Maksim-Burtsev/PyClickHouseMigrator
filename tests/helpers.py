@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import os
 import re
 
 from clickhouse_driver import Client
 
-from py_clickhouse_migrator.migrator import DEFAULT_MIGRATIONS_DIR, Migrator
+from py_clickhouse_migrator.migrator import DEFAULT_MIGRATIONS_DIR, make_migration_filename
 
-MIGRATION_FILENAME_REGEX = re.compile(r"^\d{14}(?:_\w+)*\.py$")
+MIGRATION_FILENAME_REGEX: re.Pattern[str] = re.compile(r"^\d{14}(?:_\w+)*\.py$")
 
 TEST_MIGRATION_TEMPLATE: str = '''
 def up() -> str:
@@ -38,10 +39,10 @@ def create_test_migration(
     name: str,
     up: str,
     rollback: str,
-    migrator: Migrator,
+    migrations_dir: str = DEFAULT_MIGRATIONS_DIR,
 ) -> str:
-    filename: str = migrator.get_new_migration_filename(name)
-    filepath: str = f"{DEFAULT_MIGRATIONS_DIR}/{filename}"
+    filename = make_migration_filename(name)
+    filepath = os.path.join(migrations_dir, filename)
     with open(filepath, "w") as f:
         f.write(TEST_MIGRATION_TEMPLATE.format(up=up, rollback=rollback))
     return filename

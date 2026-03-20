@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
 from click.testing import CliRunner
 
 from py_clickhouse_migrator.cli import main
-from py_clickhouse_migrator.migrator import Migrator
+from py_clickhouse_migrator.migrator import Migrator, create_migration_file
 
 FAKE_URL = "clickhouse://default@localhost:9000/default"
 
@@ -98,12 +99,13 @@ def test_accepts_valid_cluster_name(cluster: str) -> None:
 
 
 def test_rejects_invalid_migration_name() -> None:
-    m = _make_migrator()
     with pytest.raises(ValueError, match="Invalid migration name"):
-        m.get_new_migration_filename(name="../../etc")
+        create_migration_file(name="../../etc")
 
 
-def test_accepts_valid_migration_name() -> None:
-    m = _make_migrator()
-    filename = m.get_new_migration_filename(name="add_users_table")
-    assert "add_users_table" in filename
+def test_accepts_valid_migration_name(tmp_path: pytest.TempPathFactory) -> None:
+    path = str(tmp_path / "migrations")
+    os.makedirs(path)
+    filepath = create_migration_file(migrations_dir=path, name="add_users_table")
+    assert "add_users_table" in filepath
+    assert os.path.exists(filepath)
