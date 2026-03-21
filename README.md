@@ -2,7 +2,7 @@
   <img src="https://raw.githubusercontent.com/Maksim-Burtsev/PyClickHouseMigrator/master/assets/logo.png" alt="PyClickHouseMigrator" width="200">
 </p>
 
-# PyClickHouseMigrate
+# PyClickHouseMigrator
 
 [![CI](https://github.com/Maksim-Burtsev/PyClickHouseMigrator/actions/workflows/ci.yml/badge.svg)](https://github.com/Maksim-Burtsev/PyClickHouseMigrator/actions)
 [![PyPI](https://img.shields.io/pypi/v/py-clickhouse-migrator)](https://pypi.org/project/py-clickhouse-migrator/)
@@ -10,116 +10,234 @@
 [![codecov](https://codecov.io/gh/Maksim-Burtsev/PyClickHouseMigrator/branch/master/graph/badge.svg)](https://codecov.io/gh/Maksim-Burtsev/PyClickHouseMigrator)
 [![Downloads](https://static.pepy.tech/personalized-badge/py-clickhouse-migrator?period=total&units=INTERNATIONAL_SYSTEM&left_color=grey&right_color=brightgreen&left_text=downloads)](https://pepy.tech/projects/py-clickhouse-migrator)
 
-PyClickHouseMigrate is simple tool for manage your ClickHouse migrations.
+Lightweight Python tool for managing ClickHouse schema migrations. Minimal dependencies, no ORM.
 
-Inspired by [dbmate](https://github.com/amacneil/dbmate) and [aerich](https://github.com/tortoise/aerich).
-
+Features: distributed locking, checksum validation, dry-run mode, cluster support (`ON CLUSTER` DDL, replicated service tables), rollback, migration status dashboard, auto-retry on connection failure.
 
 ## Install
 
 ```sh
-➜ pip install py-clickhouse-migrator
+pip install py-clickhouse-migrator
 ```
 
-## Usage
-
-### Init migrations directory.
-
-By default migrator will create and use `./db/migrations`.
+## Quick Start
 
 ```sh
-➜ migrator --url=clickhouse://default@127.0.0.1:9000/default init
+export CLICKHOUSE_MIGRATE_URL=clickhouse://default@localhost:9000/mydb
+
+migrator init                    # create migrations directory
+migrator new create_users_table  # create migration file
+migrator up                      # apply pending migrations
+migrator show                    # check status
 ```
 
-As you can see ClickHouse url passed with `--url` param.
+`init` and `new` work offline — no ClickHouse connection required.
 
-If you want to change migrations path then you can use `--path` parameter.
+## Migration Format
+
+```python
+def up() -> str:
+    return """
+    CREATE TABLE IF NOT EXISTS users (
+        id UInt64,
+        name String,
+        created_at DateTime DEFAULT now()
+    ) ENGINE = MergeTree()
+    ORDER BY id
+    """
+
+
+def rollback() -> str:
+    return """
+    DROP TABLE IF EXISTS users
+    """
+```
+
+Each migration is a Python file with `up()` and `rollback()` functions that return SQL strings. Multiple statements can be separated by `;`.
+
+## Commands
+
+### `init`
+
+Create the migrations directory (default `./db/migrations`).
 
 ```sh
-➜ migrator --path=./your_path/migrations  --url=clickhouse://default@127.0.0.1:9000/default init
+migrator init
+migrator --path ./my/migrations init
 ```
 
-After initializitaion make sure you the folders will created.
+### `new`
+
+Create a new timestamped migration file.
 
 ```sh
-➜ tree db
-
-db
-├── migrations
-└── schema.sql
+migrator new create_users_table
 ```
 
-### Create new migration
+Name is optional. Only letters, digits, and underscores allowed.
 
-For creation new migrations you need `new` command.
+### `up`
+
+Apply pending migrations.
 
 ```sh
-➜  migrator --url=...  new first_migration
-
-Migration ./db/migrations/202401080000_first_migration.py has been created.
+migrator up          # apply all pending
+migrator up 3        # apply next 3
 ```
 
-And after this you can find empty migration inside db directory:
-```sh
-➜ tree db
-db
-├── migrations
-│   └── 202401080000_first_migration.py
-└── schema.sql
+| Option | Default | Description |
+|--------|---------|-------------|
+| `N` | all | Number of migrations to apply |
+| `--lock / --no-lock` | `--lock` | Enable/disable distributed lock |
+| `--lock-ttl` | `300` | Lock TTL in seconds |
+| `--lock-retry` | `3` | Lock acquire retry attempts |
+| `--dry-run` | off | Print SQL without executing |
+| `--allow-dirty` | off | Skip checksum validation |
+
+Example output:
+
+```
+20250318090000_create_users.py applied [✔]
+20250319120000_create_events.py applied [✔]
 ```
 
+### `rollback`
 
-## Apply new migration
-To apply new migrations you need `up` command.
-
-Apply all new migrations:
-```sh
-➜  migrator --url=...  up
-```
-
-Apply `N` new migrations (the next after the last applied):
-```sh
-➜  migrator --url=...  up N
-```
-
-## Rollback
-To rollback migrations you need `rollback` command.
-
-Rollback last applied migration:
-```sh
-➜  migrator --url=...  rollback
-```
-
-Rollback `N` migrations (the next after the last applied):
-```sh
-➜  migrator --url=...  rollback N
-```
-
-## View all migrations
-To see all migrations (including unapplied) you can use `show` command.
+Rollback applied migrations in reverse order.
 
 ```sh
-➜  migrator --url=...  show
-
-[✔] 202404081721_drop_some_column.py (HEAD)
-...
-[✔] 202401261452_new_column.py
-[✔] 202401151114_one_more_table.py
-[✔] 202401091440_new_table.py
-[✔] 202312261318_init.py
-
-Applied: 21
-Pending: 0
+migrator rollback        # rollback last 1
+migrator rollback 3      # rollback last 3
 ```
 
-Here you can also see the last applied migration `(HEAD)`.
+| Option | Default | Description |
+|--------|---------|-------------|
+| `N` | `1` | Number of migrations to rollback |
+| `--lock / --no-lock` | `--lock` | Enable/disable distributed lock |
+| `--lock-ttl` | `300` | Lock TTL in seconds |
+| `--lock-retry` | `3` | Lock acquire retry attempts |
+| `--dry-run` | off | Print SQL without executing |
 
-## Actual schema of database
-Actual schema of database is always stored in the `schema.sql` in the folder where all your migrations are located. (by default its `/db`)
+Example output:
+
+```
+20250319120000_create_events.py rolled back [✔].
+```
+
+### `show`
+
+Display migration status, integrity information, and HEAD pointer.
+
 ```sh
-➜ tree db
-db
-├── migrations
-│   └── 202401080000_init.py
-└── schema.sql # here you can find CREATE TABLE for any table of current database
+migrator show        # last 5 applied + all pending
+migrator show --all  # all applied + all pending
 ```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--all` | off | Show all applied migrations (default: last 5) |
+
+Example output:
+
+```
+Applied:
+  [X] 20250320143022_add_indexes.py (HEAD)
+  [X] 20250319120000_create_events.py
+  [X] 20250318090000_create_users.py
+
+Pending:
+  [ ] 20250321100000_add_status_column.py
+
+Applied: 3 | Pending: 1
+```
+
+Modified or missing migration files are flagged with `(modified)` or `(missing)` next to the name.
+
+### `repair`
+
+Update stored checksums in `db_migrations` to match current migration files. Use after intentionally editing an already-applied migration.
+
+```sh
+migrator repair
+```
+
+### `force-unlock`
+
+Manually release a stuck migration lock. Use when a deployment crashed mid-migration and the lock wasn't released.
+
+```sh
+migrator force-unlock
+```
+
+### `lock-info`
+
+Show current lock holder and expiration time.
+
+```sh
+migrator lock-info
+```
+
+## Configuration
+
+All global options can be set via environment variables:
+
+| Option | Env Variable | Default | Description |
+|--------|-------------|---------|-------------|
+| `--url` | `CLICKHOUSE_MIGRATE_URL` | — | ClickHouse connection URL |
+| `--path` | `CLICKHOUSE_MIGRATE_DIR` | `./db/migrations` | Migrations directory |
+| `--cluster` | `CLICKHOUSE_MIGRATE_CLUSTER` | — | Cluster name for ON CLUSTER DDL |
+| `--connect-retries` | `CLICKHOUSE_MIGRATE_CONNECT_RETRIES` | `0` | Connection retry attempts |
+| `--connect-retries-interval` | `CLICKHOUSE_MIGRATE_CONNECT_RETRIES_INTERVAL` | `1` | Seconds between retries |
+| `-v, --verbose` | — | off | Enable DEBUG logging |
+| `-q, --quiet` | — | off | Suppress all output except errors |
+
+## Distributed Locking
+
+When multiple CI/CD runners or replicas run `migrator up` simultaneously, the distributed lock prevents double-applying migrations. Enabled by default on `up` and `rollback`.
+
+The lock uses a dedicated table with TTL-based expiration (default 300 seconds) and automatic retry (default 3 attempts).
+
+If a deployment crashes mid-migration and the lock isn't released, use `lock-info` to inspect and `force-unlock` to release it manually. Locks also expire automatically after the TTL.
+
+```sh
+migrator up --no-lock              # disable locking
+migrator up --lock-ttl 600         # 10 minute TTL
+migrator up --lock-retry 5         # 5 acquire attempts
+```
+
+## Checksum Validation
+
+After a migration is applied, its SHA-256 file hash is stored in `db_migrations`. On subsequent `up` runs, stored hashes are compared with current files. If someone edited an already-applied migration, the tool fails — because the database state no longer matches what the migration file describes.
+
+`--allow-dirty` skips the check for a single run (e.g. you fixed a typo in a comment). `repair` updates all stored hashes to match current files. `show` displays integrity status per migration — ok, modified, or missing.
+
+## Cluster Support
+
+When `--cluster` is set, the migrator creates its own service tables (`db_migrations`, `_migrations_lock`) with `ON CLUSTER` and replicated engines. Your migration SQL is used as-is — if you need `ON CLUSTER` in your DDL, include it in the migration yourself.
+
+```sh
+export CLICKHOUSE_MIGRATE_CLUSTER=my_cluster
+migrator up
+```
+
+## Programmatic Usage
+
+```python
+from py_clickhouse_migrator import Migrator
+
+migrator = Migrator(
+    database_url="clickhouse://default@localhost:9000/mydb",
+    migrations_dir="./db/migrations",
+)
+migrator.up()
+```
+
+## Known Limitations
+
+**SQL splitting by `;`** — migration SQL is split into statements by `;`. Semicolons inside string literals will break parsing. If you need a literal `;` in a value, use a separate migration or encode the value differently.
+
+**No DDL transactions** — if a migration with multiple statements fails halfway, some statements will have been applied. Always use `IF NOT EXISTS` / `IF EXISTS` to make migrations idempotent and safe to re-run.
+
+## License
+
+[MIT](LICENSE)
