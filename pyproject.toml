@@ -1,6 +1,6 @@
 [project]
 name = "py-clickhouse-migrator"
-version = "0.3"
+version = "1.0.0"
 description = "Python CLI tool for ClickHouse schema migrations with distributed locking and cluster support."
 readme = "README.md"
 license = "MIT"
@@ -9,7 +9,7 @@ authors = [
     { name = "Maksim Burtsev", email = "zadrot-lol@list.ru" },
 ]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
