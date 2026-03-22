@@ -69,7 +69,7 @@ def test_force_release(lock: MigrationLock, second_lock: MigrationLock) -> None:
     lock.acquire()
     assert lock.is_locked()
 
-    second_lock.force_release()
+    second_lock.release(force=True)
     assert not lock.is_locked()
 
 

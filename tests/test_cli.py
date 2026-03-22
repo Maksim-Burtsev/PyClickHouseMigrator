@@ -288,7 +288,7 @@ def test_cli_force_unlock(runner: CliRunner, mock_migrator: MagicMock) -> None:
     assert result.exit_code == 0
     assert "Lock forcefully released" in result.output
     mock_lock_cls.assert_called_once_with(client=mock_migrator.ch_client, db="test", cluster="")
-    mock_lock.force_release.assert_called_once()
+    mock_lock.release.assert_called_once_with(force=True)
 
 
 # --- lock-info ---

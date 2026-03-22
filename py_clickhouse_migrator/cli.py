@@ -198,7 +198,7 @@ def force_unlock(ctx: click.Context) -> None:
         connect_retries_interval=ctx.obj["connect_retries_interval"],
     )
     lock = MigrationLock(client=migrator.ch_client, db=migrator.get_db_name(), cluster=cluster)
-    lock.force_release()
+    lock.release(force=True)
     click.echo("Lock forcefully released.")
 
 

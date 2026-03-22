@@ -168,25 +168,16 @@ class MigrationLock:
             expires_at=info.expires_at,
         )
 
-    def release(self) -> None:
-        """Release the lock held by this instance."""
+    def release(self, *, force: bool = False) -> None:
+        """Release the migration lock."""
+        locked_by = "force_release" if force else self._locked_by
         now = dt.datetime.now(tz=dt.timezone.utc)
         self._client.execute(
             f"INSERT INTO {self._db}.{self._LOCK_TABLE} (lock_id, locked_by, locked_at, expires_at, is_locked) VALUES",
-            [[self._LOCK_ID, self._locked_by, now, now, 0]],
+            [[self._LOCK_ID, locked_by, now, now, 0]],
             settings=self._settings,
         )
-        logger.debug("Lock released by %s", self._locked_by)
-
-    def force_release(self) -> None:
-        """Release the lock regardless of who holds it."""
-        now = dt.datetime.now(tz=dt.timezone.utc)
-        self._client.execute(
-            f"INSERT INTO {self._db}.{self._LOCK_TABLE} (lock_id, locked_by, locked_at, expires_at, is_locked) VALUES",
-            [[self._LOCK_ID, "force_release", now, now, 0]],
-            settings=self._settings,
-        )
-        logger.info("Lock forcefully released.")
+        logger.debug("Lock released by %s", locked_by)
 
     def is_locked(self) -> bool:
         """Check whether the migration lock is currently held."""
