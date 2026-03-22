@@ -1,14 +1,25 @@
 Change log
 ==========
 
-0.1 (24/12/2023)
-------------------
-- First release
-
-0.2 (26/12/2023)
-------------------
-- Second release (add .env loading)
+1.0.0 (22/03/2026)
+-------------------
+- Distributed locking with TTL
+- Checksum validation & repair
+- Cluster support (ON CLUSTER)
+- Dry-run mode
+- Connect retries
+- Input validation
+- CLI error handling
+- --version flag
 
 0.3 (19/03/2024)
 ------------------
-- Third release (fix queries parsing)
+- Fix queries parsing
+
+0.2 (26/12/2023)
+------------------
+- Add .env loading
+
+0.1 (24/12/2023)
+------------------
+- First release
