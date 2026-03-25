@@ -420,12 +420,11 @@ wheels = [
 
 [[package]]
 name = "py-clickhouse-migrator"
-version = "0.3"
+version = "1.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
     { name = "clickhouse-driver" },
-    { name = "termcolor" },
 ]
 
 [package.dev-dependencies]
@@ -442,7 +441,6 @@ dev = [
 requires-dist = [
     { name = "click", specifier = ">=8.0.1" },
     { name = "clickhouse-driver", specifier = ">=0.2.0" },
-    { name = "termcolor", specifier = ">=2.0.0" },
 ]
 
 [package.metadata.requires-dev]
