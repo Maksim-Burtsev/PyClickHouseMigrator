@@ -35,7 +35,6 @@ keywords = [
 dependencies = [
     "click>=8.0.1",
     "clickhouse-driver>=0.2.0",
-    "termcolor>=2.0.0",
 ]
 
 [project.scripts]
