@@ -5,6 +5,7 @@ import logging
 import os
 import re
 import time
+import types
 from dataclasses import dataclass, field
 from typing import Final, NamedTuple
 
@@ -70,12 +71,23 @@ class ShowMigrationsResult(NamedTuple):
 
 
 def normalize_content(content: str) -> str:
-    lines = [line.rstrip() for line in content.splitlines()]
-    return "\n".join(lines).strip()
+    lines = [line.rstrip() for line in content.splitlines() if line.strip()]
+    return "\n".join(lines)
 
 
-def compute_checksum(content: str) -> str:
-    return hashlib.sha256(normalize_content(content).encode("utf-8")).hexdigest()
+def _load_migration(filepath: str) -> types.ModuleType | None:
+    name = os.path.basename(filepath)
+    spec = importlib.util.spec_from_file_location(name, filepath)
+    if spec is None or spec.loader is None:
+        return None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def compute_checksum(up: str, rollback: str) -> str:
+    combined = normalize_content(up) + "\0" + normalize_content(rollback)
+    return hashlib.sha256(combined.encode("utf-8")).hexdigest()
 
 
 @dataclass
@@ -282,23 +294,20 @@ class Migrator(object):
         result: list[Migration] = []
         for filename in filenames:
             filepath = f"{self.migrations_dir}/{filename}"
-            spec = importlib.util.spec_from_file_location(filename, filepath)
-            if spec is None or spec.loader is None:
+            module = _load_migration(filepath)
+            if module is None:
                 raise InvalidMigrationError(f"Cannot load migration: {filepath}")
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
             up: str = module.up()
             if not up.strip():
                 logger.warning("Skip empty migration: %s", filename)
                 continue
-            with open(filepath) as f:
-                file_content = f.read()
+            rollback = module.rollback()
             result.append(
                 Migration(
                     name=filename,
                     up=up,
-                    rollback=module.rollback(),
-                    checksum=compute_checksum(file_content),
+                    rollback=rollback,
+                    checksum=compute_checksum(up, rollback),
                 )
             )
 
@@ -351,8 +360,13 @@ class Migrator(object):
             if not os.path.exists(filepath):
                 mismatches.append(ChecksumMismatch(name, stored_checksum, ""))
                 continue
-            with open(filepath) as f:
-                actual_checksum = compute_checksum(f.read())
+            module = _load_migration(filepath)
+            if module is None:
+                continue
+            actual_checksum = compute_checksum(
+                up=module.up(),
+                rollback=module.rollback(),
+            )
             if actual_checksum != stored_checksum:
                 mismatches.append(ChecksumMismatch(name, stored_checksum, actual_checksum))
         return mismatches
