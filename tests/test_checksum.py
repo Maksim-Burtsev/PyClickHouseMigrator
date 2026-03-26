@@ -37,24 +37,59 @@ def test_normalize_unifies_line_endings() -> None:
 def test_normalize_strips_leading_trailing_blank_lines() -> None:
     content = "\n\n  SELECT 1;\n\n"
     result = normalize_content(content)
-    assert result == "SELECT 1;"
+    assert result == "  SELECT 1;"
+
+
+def test_normalize_filters_blank_lines_between_statements() -> None:
+    assert normalize_content("SELECT 1;\n\nSELECT 2;") == "SELECT 1;\nSELECT 2;"
+
+
+def test_normalize_filters_multiple_blank_lines() -> None:
+    assert normalize_content("SELECT 1;\n\n\n\nSELECT 2;") == "SELECT 1;\nSELECT 2;"
+
+
+def test_normalize_filters_blank_lines_at_edges() -> None:
+    assert normalize_content("\n\nSELECT 1;\n\n") == "SELECT 1;"
+
+
+def test_normalize_filters_blank_lines_with_spaces() -> None:
+    assert normalize_content("SELECT 1;\n   \n  \nSELECT 2;") == "SELECT 1;\nSELECT 2;"
 
 
 def test_checksum_deterministic() -> None:
-    content = "SELECT 1;\nSELECT 2;"
-    assert compute_checksum(content) == compute_checksum(content)
+    up = "SELECT 1;\nSELECT 2;"
+    rb = "SELECT 1;"
+    assert compute_checksum(up, rb) == compute_checksum(up, rb)
 
 
 def test_checksum_ignores_whitespace_changes() -> None:
-    content_1 = "SELECT 1;   \r\nSELECT 2;\t\n"
-    content_2 = "SELECT 1;\nSELECT 2;\n"
-    assert compute_checksum(content_1) == compute_checksum(content_2)
+    up_1 = "SELECT 1;   \r\nSELECT 2;\t\n"
+    up_2 = "SELECT 1;\nSELECT 2;\n"
+    rb = "SELECT 1;"
+    assert compute_checksum(up_1, rb) == compute_checksum(up_2, rb)
 
 
 def test_checksum_detects_content_changes() -> None:
-    content_1 = "SELECT 1;"
-    content_2 = "SELECT 2;"
-    assert compute_checksum(content_1) != compute_checksum(content_2)
+    rb = "SELECT 1;"
+    assert compute_checksum("SELECT 1;", rb) != compute_checksum("SELECT 2;", rb)
+
+
+def test_checksum_stable_across_blank_lines() -> None:
+    up_1 = "SELECT 1;\n\nSELECT 2;"
+    up_2 = "SELECT 1;\nSELECT 2;"
+    rb = "SELECT 1;"
+    assert compute_checksum(up_1, rb) == compute_checksum(up_2, rb)
+
+
+def test_checksum_uses_both_up_and_rollback() -> None:
+    up = "CREATE TABLE t (id Int32) ENGINE = MergeTree ORDER BY id"
+    rb_1 = "DROP TABLE t"
+    rb_2 = "DROP TABLE IF EXISTS t"
+    assert compute_checksum(up, rb_1) != compute_checksum(up, rb_2)
+
+
+def test_checksum_no_collision_on_concatenation() -> None:
+    assert compute_checksum("SELECT 1;", "SELECT 2; SELECT 3;") != compute_checksum("SELECT 1; SELECT 2;", "SELECT 3;")
 
 
 # --- checksum save ---
