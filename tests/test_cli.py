@@ -19,7 +19,9 @@ from py_clickhouse_migrator.migrator import (
     ClickHouseServerIsNotHealthyError,
     DatabaseNotFoundError,
     InvalidMigrationError,
+    Migration,
     MigrationDirectoryNotFoundError,
+    Migrator,
     MissingDatabaseUrlError,
     ShowMigrationsResult,
 )
@@ -121,6 +123,28 @@ def test_cli_new_missing_dir(runner: CliRunner, tmp_path: pytest.TempPathFactory
 # --- up ---
 
 
+def test_up_dry_run_output_visible_with_quiet(runner: CliRunner) -> None:
+    """--quiet must not suppress dry-run output (click.echo, not logger)."""
+    migrations = [
+        Migration(
+            name="001_create_users.py",
+            up="CREATE TABLE users (id Int32) ENGINE MergeTree() ORDER BY id",
+            rollback="DROP TABLE users",
+            checksum="abc123",
+        ),
+    ]
+    with (
+        patch.object(Migrator, "__init__", return_value=None),
+        patch.object(Migrator, "check_integrity"),
+        patch.object(Migrator, "get_migrations_for_apply", return_value=migrations),
+    ):
+        result = runner.invoke(main, ["--url", FAKE_URL, "--quiet", "up", "--dry-run"])
+
+    assert result.exit_code == 0
+    assert "(up)" in result.output
+    assert "CREATE TABLE" in result.output
+
+
 def test_cli_up_dry_run(runner: CliRunner, mock_migrator: MagicMock) -> None:
     result = runner.invoke(main, ["--url", FAKE_URL, "up", "--dry-run"])
     assert result.exit_code == 0
@@ -176,6 +200,25 @@ def test_cli_up_with_number(runner: CliRunner, mock_migrator: MagicMock) -> None
 
 
 # --- rollback ---
+
+
+def test_rollback_dry_run_output_visible_with_quiet(runner: CliRunner) -> None:
+    migrations = [
+        Migration(
+            name="001_create_users.py",
+            up="CREATE TABLE users (id Int32) ENGINE MergeTree() ORDER BY id",
+            rollback="DROP TABLE users",
+        ),
+    ]
+    with (
+        patch.object(Migrator, "__init__", return_value=None),
+        patch.object(Migrator, "get_migrations_for_rollback", return_value=migrations),
+    ):
+        result = runner.invoke(main, ["--url", FAKE_URL, "--quiet", "rollback", "--dry-run"])
+
+    assert result.exit_code == 0
+    assert "(rollback)" in result.output
+    assert "DROP TABLE" in result.output
 
 
 def test_cli_rollback_dry_run(runner: CliRunner, mock_migrator: MagicMock) -> None:

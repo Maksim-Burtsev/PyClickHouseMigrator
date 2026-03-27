@@ -1,5 +1,6 @@
 import datetime as dt
 import hashlib
+import textwrap
 import importlib.util
 import logging
 import os
@@ -244,10 +245,12 @@ class Migrator(object):
         migrations: list[Migration] = self.get_migrations_for_apply(n)
         if not migrations:
             logger.info("There are no migrations to apply.")
-        for migration in migrations:
+        for i, migration in enumerate(migrations):
             if dry_run:
-                logger.info("-- %s (up)", migration.name)
-                logger.info("%s\n", migration.up.strip())
+                if i > 0:
+                    click.echo("")
+                click.echo(click.style(f"-- {migration.name} (up)", fg="cyan", bold=True))
+                click.echo(textwrap.dedent(migration.up).strip())
                 continue
             self.apply_migration(query=migration.up)
             self.save_applied_migration(
@@ -261,10 +264,12 @@ class Migrator(object):
     def rollback(self, number: int = 1, dry_run: bool = False) -> None:
         """Rollback applied migrations in reverse order."""
         migrations: list[Migration] = self.get_migrations_for_rollback(number=number)
-        for migration in migrations:
+        for i, migration in enumerate(migrations):
             if dry_run:
-                logger.info("-- %s (rollback)", migration.name)
-                logger.info("%s\n", migration.rollback.strip())
+                if i > 0:
+                    click.echo("")
+                click.echo(click.style(f"-- {migration.name} (rollback)", fg="yellow", bold=True))
+                click.echo(textwrap.dedent(migration.rollback).strip())
                 continue
             self.apply_migration(
                 query=migration.rollback,
