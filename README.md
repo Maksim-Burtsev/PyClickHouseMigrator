@@ -220,7 +220,7 @@ export CLICKHOUSE_MIGRATE_CLUSTER=my_cluster
 migrator up
 ```
 
-## Programmatic Usage
+## Python API
 
 ```python
 from py_clickhouse_migrator import Migrator
