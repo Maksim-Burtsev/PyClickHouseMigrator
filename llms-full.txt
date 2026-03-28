@@ -288,14 +288,14 @@ How it works:
 
 ### Checksum Validation
 
-When a migration is applied, the SHA-256 hash of its file content (after whitespace normalization) is stored in the `checksum` column of `db_migrations`.
+When a migration is applied, the SHA-256 hash of the SQL output from its `up()` and `rollback()` functions is stored in the `checksum` column of `db_migrations`. The two outputs are normalized, joined with a null byte separator, and hashed.
 
-On each `up` run, stored checksums are compared with current file contents. If a mismatch is found:
+On each `up` run, stored checksums are compared with the current SQL output of each migration's functions. If a mismatch is found:
 
 - Without `--allow-dirty`: raises `ChecksumMismatchError` and aborts
 - With `--allow-dirty`: logs a warning and continues
 
-Whitespace normalization: trailing whitespace is stripped from each line, lines are joined by `\n`, then the result is stripped.
+Whitespace normalization: blank lines (containing only whitespace) are removed, trailing whitespace is stripped from remaining lines, then lines are joined by `\n`.
 
 The `repair` command recalculates checksums from current files and updates the stored values. Missing files are skipped.
 
