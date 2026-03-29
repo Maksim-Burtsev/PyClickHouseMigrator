@@ -683,6 +683,20 @@ def test_migrator_cluster_param_from_init(_mock: object, test_db: str) -> None:
     assert migrator.cluster == "my_cluster"
 
 
+def test_send_receive_timeout_passed_to_client(ch_client: Client, test_db: str) -> None:
+    ch_client.execute("DROP TABLE IF EXISTS db_migrations")
+    migrator = Migrator(database_url=test_db, send_receive_timeout=900)
+    assert migrator.ch_client.connection.send_receive_timeout == 900
+    ch_client.execute("DROP TABLE IF EXISTS db_migrations")
+
+
+def test_send_receive_timeout_default(ch_client: Client, test_db: str) -> None:
+    ch_client.execute("DROP TABLE IF EXISTS db_migrations")
+    migrator = Migrator(database_url=test_db)
+    assert migrator.ch_client.connection.send_receive_timeout == 600
+    ch_client.execute("DROP TABLE IF EXISTS db_migrations")
+
+
 def test_migrator_cluster_param_empty_by_default(ch_client: Client, test_db: str) -> None:
     ch_client.execute("DROP TABLE IF EXISTS db_migrations")
     migrator = Migrator(database_url=test_db)

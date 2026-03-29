@@ -152,6 +152,7 @@ class Migrator(object):
         cluster: str = "",
         connect_retries: int = 0,
         connect_retries_interval: int = 1,
+        send_receive_timeout: int = 600,
     ) -> None:
         if not database_url:
             raise MissingDatabaseUrlError(
@@ -166,6 +167,7 @@ class Migrator(object):
         self._connect_retries_interval: int = connect_retries_interval
         self._settings: ClickHouseSettings = _CLUSTER_SETTINGS.copy() if self.cluster else {}
         self.ch_client: Client = Client.from_url(database_url)
+        self.ch_client.connection.send_receive_timeout = send_receive_timeout
         self.health_check()
         self.check_migrations_table()
 

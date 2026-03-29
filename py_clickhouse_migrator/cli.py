@@ -47,6 +47,7 @@ class ContextObj(t.TypedDict):
     cluster: str
     connect_retries: int
     connect_retries_interval: int
+    send_receive_timeout: int
 
 
 @click.command()
@@ -84,6 +85,7 @@ def up(
         cluster=cluster,
         connect_retries=ctx.obj["connect_retries"],
         connect_retries_interval=ctx.obj["connect_retries_interval"],
+        send_receive_timeout=ctx.obj["send_receive_timeout"],
     )
     if dry_run:
         migrator.up(n=number, dry_run=True, allow_dirty=allow_dirty)
@@ -120,6 +122,7 @@ def rollback(ctx: click.Context, number: int, lock: bool, lock_ttl: int, lock_re
         cluster=cluster,
         connect_retries=ctx.obj["connect_retries"],
         connect_retries_interval=ctx.obj["connect_retries_interval"],
+        send_receive_timeout=ctx.obj["send_receive_timeout"],
     )
     if dry_run:
         migrator.rollback(number=number, dry_run=True)
@@ -143,6 +146,7 @@ def show(ctx: click.Context, show_all: bool) -> None:
         cluster=ctx.obj["cluster"],
         connect_retries=ctx.obj["connect_retries"],
         connect_retries_interval=ctx.obj["connect_retries_interval"],
+        send_receive_timeout=ctx.obj["send_receive_timeout"],
     ).show_migrations(show_all=show_all)
     click.echo(output)
     if warning:
@@ -170,6 +174,7 @@ def repair(ctx: click.Context) -> None:
         cluster=ctx.obj["cluster"],
         connect_retries=ctx.obj["connect_retries"],
         connect_retries_interval=ctx.obj["connect_retries_interval"],
+        send_receive_timeout=ctx.obj["send_receive_timeout"],
     )
     mismatches = migrator.validate_checksums()
     if not mismatches:
@@ -196,6 +201,7 @@ def force_unlock(ctx: click.Context) -> None:
         cluster=cluster,
         connect_retries=ctx.obj["connect_retries"],
         connect_retries_interval=ctx.obj["connect_retries_interval"],
+        send_receive_timeout=ctx.obj["send_receive_timeout"],
     )
     lock = MigrationLock(client=migrator.ch_client, db=migrator.get_db_name(), cluster=cluster)
     lock.release(force=True)
@@ -212,6 +218,7 @@ def lock_info(ctx: click.Context) -> None:
         cluster=cluster,
         connect_retries=ctx.obj["connect_retries"],
         connect_retries_interval=ctx.obj["connect_retries_interval"],
+        send_receive_timeout=ctx.obj["send_receive_timeout"],
     )
     ml = MigrationLock(client=migrator.ch_client, db=migrator.get_db_name(), cluster=cluster)
     info = ml.get_lock_info()
@@ -277,6 +284,13 @@ def lock_info(ctx: click.Context) -> None:
     envvar="CLICKHOUSE_MIGRATE_CONNECT_RETRIES_INTERVAL",
     help="Seconds between connection retries.",
 )
+@click.option(
+    "--send-receive-timeout",
+    type=int,
+    default=600,
+    envvar="CLICKHOUSE_MIGRATE_SEND_RECEIVE_TIMEOUT",
+    help="Timeout in seconds for sending/receiving data. Default: 600.",
+)
 @click.pass_context
 def main(
     ctx: click.Context,
@@ -287,6 +301,7 @@ def main(
     cluster: str,
     connect_retries: int,
     connect_retries_interval: int,
+    send_receive_timeout: int,
 ) -> None:
     if verbose:
         level = logging.DEBUG
@@ -302,6 +317,7 @@ def main(
         cluster=cluster,
         connect_retries=connect_retries,
         connect_retries_interval=connect_retries_interval,
+        send_receive_timeout=send_receive_timeout,
     )
 
 
