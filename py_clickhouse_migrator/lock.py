@@ -123,11 +123,11 @@ class MigrationLock:
             [[self._LOCK_ID, self._locked_by, now, expires, 1]],
             settings=self._settings,
         )
-        verified = self._get_active_lock()
-        if verified is not None and verified.locked_by == self._locked_by:
+        current_lock = self._get_active_lock()
+        if current_lock is not None and current_lock.locked_by == self._locked_by:
             logger.debug("Lock acquired by %s", self._locked_by)
             return None
-        return verified
+        return current_lock
 
     def acquire(self, retry_count: int = 0, retry_delay: float = 1.0) -> None:
         """Acquire the migration lock.
@@ -171,6 +171,18 @@ class MigrationLock:
 
     def release(self, *, force: bool = False) -> None:
         """Release the migration lock."""
+        if not force:
+            current_lock = self._get_active_lock()
+            if current_lock is None:
+                logger.debug("No active lock to release")
+                return
+            if current_lock.locked_by != self._locked_by:
+                logger.warning(
+                    "Lock is held by another worker %s, skipping release (current worker: %s)",
+                    current_lock.locked_by,
+                    self._locked_by,
+                )
+                return
         locked_by = "force_release" if force else self._locked_by
         now = dt.datetime.now(tz=dt.timezone.utc)
         self._client.execute(
