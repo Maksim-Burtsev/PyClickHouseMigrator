@@ -230,3 +230,33 @@ def test_acquire_release_no_cluster(lock: MigrationLock) -> None:
 
     lock.release()
     assert not lock.is_locked()
+
+
+def test_release_skips_when_lock_held_by_other(
+    lock: MigrationLock, second_lock: MigrationLock, caplog: pytest.LogCaptureFixture
+) -> None:
+    """release() should not unlock when another process holds the lock."""
+    lock.acquire()
+    assert lock.is_locked()
+
+    info = lock.get_lock_info()
+    assert info is not None
+    assert info.locked_by == lock._locked_by
+    assert info.locked_by != second_lock._locked_by
+
+    with caplog.at_level(logging.WARNING, logger="py_clickhouse_migrator"):
+        second_lock.release()
+    assert "Lock is held by another worker" in caplog.text
+    assert lock.is_locked()
+
+    lock.release()
+
+
+def test_release_skips_when_no_active_lock(lock: MigrationLock, caplog: pytest.LogCaptureFixture) -> None:
+    """release() without prior acquire should be a no-op."""
+    assert not lock.is_locked()
+    with caplog.at_level(logging.DEBUG, logger="py_clickhouse_migrator"):
+        lock.release()
+    assert "No active lock to release" in caplog.text
+    assert not lock.is_locked()
+    assert lock.get_lock_info() is None
