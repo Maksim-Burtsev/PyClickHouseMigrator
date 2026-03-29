@@ -131,6 +131,7 @@ def test_lock_info(lock: MigrationLock) -> None:
     assert re.fullmatch(r".+:\d+:[0-9a-f]{8}", info.locked_by)
     assert isinstance(info.locked_at, dt.datetime)
     assert isinstance(info.expires_at, dt.datetime)
+    assert info.expires_at > info.locked_at
 
     lock.release()
 

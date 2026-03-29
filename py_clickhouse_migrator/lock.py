@@ -116,11 +116,12 @@ class MigrationLock:
 
     def _try_acquire(self) -> LockInfo | None:
         """Insert a lock row and verify ownership. Returns None on success, LockInfo of holder on failure."""
-        now = dt.datetime.now(tz=dt.timezone.utc)
-        expires = now + dt.timedelta(seconds=self._ttl)
         self._client.execute(
-            f"INSERT INTO {self._db}.{self._LOCK_TABLE} (lock_id, locked_by, locked_at, expires_at, is_locked) VALUES",
-            [[self._LOCK_ID, self._locked_by, now, expires, 1]],
+            f"INSERT INTO {self._db}.{self._LOCK_TABLE} "
+            f"(lock_id, locked_by, locked_at, expires_at, is_locked) "
+            f"SELECT %(lock_id)s, %(locked_by)s, now64(3), "
+            f"now64(3) + INTERVAL %(ttl)s SECOND, 1",
+            {"lock_id": self._LOCK_ID, "locked_by": self._locked_by, "ttl": self._ttl},
             settings=self._settings,
         )
         verified = self._get_active_lock()
@@ -172,10 +173,11 @@ class MigrationLock:
     def release(self, *, force: bool = False) -> None:
         """Release the migration lock."""
         locked_by = "force_release" if force else self._locked_by
-        now = dt.datetime.now(tz=dt.timezone.utc)
         self._client.execute(
-            f"INSERT INTO {self._db}.{self._LOCK_TABLE} (lock_id, locked_by, locked_at, expires_at, is_locked) VALUES",
-            [[self._LOCK_ID, locked_by, now, now, 0]],
+            f"INSERT INTO {self._db}.{self._LOCK_TABLE} "
+            f"(lock_id, locked_by, locked_at, expires_at, is_locked) "
+            f"SELECT %(lock_id)s, %(locked_by)s, now64(3), now64(3), 0",
+            {"lock_id": self._LOCK_ID, "locked_by": locked_by},
             settings=self._settings,
         )
         logger.debug("Lock released by %s", locked_by)
