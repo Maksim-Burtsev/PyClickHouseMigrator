@@ -64,7 +64,7 @@ def init(ctx: click.Context) -> None:
     required=False,
 )
 @click.option("--lock/--no-lock", default=True, help="Enable/disable migration lock.")
-@click.option("--lock-ttl", type=click.IntRange(min=1), default=300, help="Lock TTL in seconds.")
+@click.option("--lock-ttl", type=click.IntRange(min=1), default=600, help="Lock TTL in seconds.")
 @click.option("--lock-retry", type=click.IntRange(min=0), default=3, help="Number of lock acquire retries.")
 @click.option("--dry-run", is_flag=True, default=False, help="Show SQL without executing.")
 @click.option("--allow-dirty", is_flag=True, default=False, help="Skip checksum validation.")
@@ -110,7 +110,7 @@ def up(
     required=False,
 )
 @click.option("--lock/--no-lock", default=True, help="Enable/disable migration lock.")
-@click.option("--lock-ttl", type=click.IntRange(min=1), default=300, help="Lock TTL in seconds.")
+@click.option("--lock-ttl", type=click.IntRange(min=1), default=600, help="Lock TTL in seconds.")
 @click.option("--lock-retry", type=click.IntRange(min=0), default=3, help="Number of lock acquire retries.")
 @click.option("--dry-run", is_flag=True, default=False, help="Show SQL without executing.")
 @click.pass_context
