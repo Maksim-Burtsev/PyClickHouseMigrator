@@ -9,6 +9,7 @@ import time
 from dataclasses import dataclass
 from typing import cast
 from types import TracebackType
+from uuid import uuid4
 
 from clickhouse_driver import Client
 
@@ -90,7 +91,7 @@ class MigrationLock:
         self._retry_delay = retry_delay
         self._cluster = cluster
         self._settings: ClickHouseSettings = _CLUSTER_SETTINGS.copy() if self._cluster else {}
-        self._locked_by = f"{socket.gethostname()}:{os.getpid()}"
+        self._locked_by = f"{socket.gethostname()}:{os.getpid()}:{uuid4().hex[:8]}"
         self.ensure_table()
 
     def ensure_table(self) -> None:

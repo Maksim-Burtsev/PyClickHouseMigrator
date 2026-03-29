@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
+import re
 from collections.abc import Generator
 from unittest.mock import MagicMock, patch
 
@@ -45,6 +46,8 @@ def test_acquire_release(lock: MigrationLock) -> None:
 
 
 def test_double_acquire_fails(lock: MigrationLock, second_lock: MigrationLock) -> None:
+    assert lock._locked_by != second_lock._locked_by
+
     lock.acquire()
     assert lock.is_locked()
 
@@ -125,6 +128,7 @@ def test_lock_info(lock: MigrationLock) -> None:
     assert info is not None
     assert isinstance(info, LockInfo)
     assert info.locked_by == lock._locked_by
+    assert re.fullmatch(r".+:\d+:[0-9a-f]{8}", info.locked_by)
     assert isinstance(info.locked_at, dt.datetime)
     assert isinstance(info.expires_at, dt.datetime)
 
