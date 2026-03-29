@@ -117,10 +117,16 @@ class MigrationLock:
     def _try_acquire(self) -> LockInfo | None:
         """Insert a lock row and verify ownership. Returns None on success, LockInfo of holder on failure."""
         self._client.execute(
-            f"INSERT INTO {self._db}.{self._LOCK_TABLE} "
-            f"(lock_id, locked_by, locked_at, expires_at, is_locked) "
-            f"SELECT %(lock_id)s, %(locked_by)s, now64(3), "
-            f"now64(3) + INTERVAL %(ttl)s SECOND, 1",
+            f"""
+            INSERT INTO {self._db}.{self._LOCK_TABLE}
+                (lock_id, locked_by, locked_at, expires_at, is_locked)
+            SELECT
+                %(lock_id)s,
+                %(locked_by)s,
+                now64(3),
+                now64(3) + INTERVAL %(ttl)s SECOND,
+                1
+            """,
             {"lock_id": self._LOCK_ID, "locked_by": self._locked_by, "ttl": self._ttl},
             settings=self._settings,
         )
@@ -174,9 +180,16 @@ class MigrationLock:
         """Release the migration lock."""
         locked_by = "force_release" if force else self._locked_by
         self._client.execute(
-            f"INSERT INTO {self._db}.{self._LOCK_TABLE} "
-            f"(lock_id, locked_by, locked_at, expires_at, is_locked) "
-            f"SELECT %(lock_id)s, %(locked_by)s, now64(3), now64(3), 0",
+            f"""
+            INSERT INTO {self._db}.{self._LOCK_TABLE}
+                (lock_id, locked_by, locked_at, expires_at, is_locked)
+            SELECT
+                %(lock_id)s,
+                %(locked_by)s,
+                now64(3),
+                now64(3),
+                0
+            """,
             {"lock_id": self._LOCK_ID, "locked_by": locked_by},
             settings=self._settings,
         )
@@ -192,9 +205,16 @@ class MigrationLock:
 
     def _get_active_lock(self) -> LockInfo | None:
         rows = self._client.execute(
-            f"SELECT locked_by, locked_at, expires_at "
-            f"FROM {self._db}.{self._LOCK_TABLE} FINAL "
-            f"WHERE lock_id = %(lock_id)s AND is_locked = 1 AND expires_at > now64(3)",
+            f"""
+            SELECT
+                locked_by,
+                locked_at,
+                expires_at
+            FROM {self._db}.{self._LOCK_TABLE} FINAL
+            WHERE lock_id = %(lock_id)s
+                AND is_locked = 1
+                AND expires_at > now64(3)
+            """,
             {"lock_id": self._LOCK_ID},
             settings=self._settings,
         )
