@@ -191,6 +191,24 @@ All global options can be set via environment variables:
 | `-v, --verbose` | — | off | Enable DEBUG logging |
 | `-q, --quiet` | — | off | Suppress all output except errors |
 
+## Docker
+
+```sh
+docker pull maksimburtsev/py-clickhouse-migrator
+```
+
+```sh
+docker run --rm \
+  -v ./migrations:/migrations \
+  -e CLICKHOUSE_MIGRATE_URL=clickhouse://default@clickhouse:9000/mydb \
+  maksimburtsev/py-clickhouse-migrator:1 \
+  up
+```
+
+Mount your migrations directory to `/migrations` inside the container.
+
+Pin to a major version tag (`:1`) or an exact version (`:1.0.0`).
+
 ## Distributed Locking
 
 When multiple CI/CD runners or replicas run `migrator up` simultaneously, the distributed lock prevents double-applying migrations. Enabled by default on `up` and `rollback`.
