@@ -20,24 +20,6 @@ Features: distributed locking, checksum validation, dry-run mode, cluster suppor
 pip install py-clickhouse-migrator
 ```
 
-## Docker
-
-```sh
-docker pull maksimburtsev/py-clickhouse-migrator
-```
-
-```sh
-docker run --rm \
-  -v ./migrations:/migrations \
-  -e CLICKHOUSE_MIGRATE_URL=clickhouse://default@clickhouse:9000/mydb \
-  maksimburtsev/py-clickhouse-migrator:1 \
-  up
-```
-
-Mount your migrations directory to `/migrations` inside the container.
-
-Pin to a major version tag (`:1`) or an exact version (`:1.0.0`).
-
 ## Quick Start
 
 ```sh
@@ -208,6 +190,24 @@ All global options can be set via environment variables:
 | `--connect-retries-interval` | `CLICKHOUSE_MIGRATE_CONNECT_RETRIES_INTERVAL` | `1` | Seconds between retries |
 | `-v, --verbose` | — | off | Enable DEBUG logging |
 | `-q, --quiet` | — | off | Suppress all output except errors |
+
+## Docker
+
+```sh
+docker pull maksimburtsev/py-clickhouse-migrator
+```
+
+```sh
+docker run --rm \
+  -v ./migrations:/migrations \
+  -e CLICKHOUSE_MIGRATE_URL=clickhouse://default@clickhouse:9000/mydb \
+  maksimburtsev/py-clickhouse-migrator:1 \
+  up
+```
+
+Mount your migrations directory to `/migrations` inside the container.
+
+Pin to a major version tag (`:1`) or an exact version (`:1.0.0`).
 
 ## Distributed Locking
 
