@@ -12,7 +12,7 @@
 
 Lightweight Python tool for managing ClickHouse schema migrations. Minimal dependencies, no ORM.
 
-Features: distributed locking, checksum validation, dry-run mode, cluster support (`ON CLUSTER` DDL, replicated service tables), rollback, migration status dashboard, auto-retry on connection failure.
+Features: checksum validation, dry-run mode, cluster support (`ON CLUSTER` DDL, replicated service tables), rollback, migration status dashboard, auto-retry on connection failure, concurrent execution protection.
 
 ## Install
 
@@ -210,9 +210,9 @@ Mount your migrations directory to `/migrations` inside the container.
 
 Pin to a major version tag (`:1`) or an exact version (`:1.0.0`).
 
-## Distributed Locking
+## Locking
 
-When multiple CI/CD runners or replicas run `migrator up` simultaneously, the distributed lock prevents double-applying migrations. Enabled by default on `up` and `rollback`.
+When multiple processes run `migrator up` simultaneously, the advisory lock prevents double-applying migrations. Enabled by default on `up` and `rollback`.
 
 The lock uses a dedicated table with TTL-based expiration (default 600 seconds) and automatic retry (default 3 attempts). If you increase `--send-receive-timeout`, increase `--lock-ttl` accordingly.
 
@@ -256,6 +256,8 @@ migrator.up()
 **SQL splitting by `;`** — migration SQL is split into statements by `;`. Semicolons inside string literals will break parsing. If you need a literal `;` in a value, use a separate migration or encode the value differently.
 
 **No DDL transactions** — if a migration with multiple statements fails halfway, some statements will have been applied. Always use `IF NOT EXISTS` / `IF EXISTS` to make migrations idempotent and safe to re-run.
+
+**Advisory lock** — the locking mechanism is best-effort, not a true distributed mutex. There is a race condition window of a few milliseconds between INSERT and verification where two processes could both acquire the lock. If you need stronger guarantees, run migrations from a single process (e.g. a Kubernetes Job or a CI/CD pipeline step).
 
 ## License
 

@@ -1,12 +1,12 @@
 # PyClickHouseMigrator
 
 > Lightweight, ORM-free Python CLI for ClickHouse schema migrations.
-> Distributed locking via ReplacingMergeTree for safe concurrent deploys.
+> Advisory locking for concurrent execution protection.
 > Supports single-node and cluster (ON CLUSTER) modes with replicated service tables.
 
 ## Overview
 
-PyClickHouseMigrator is a CLI tool for managing ClickHouse schema migrations. It uses plain Python files as migrations — each file contains `up()` and `rollback()` functions that return SQL strings. The tool tracks applied migrations in a ClickHouse table, supports distributed locking for safe concurrent deploys (e.g. multiple CI/CD runners), checksum validation to detect modified migrations, dry-run mode, and cluster support with `ON CLUSTER` DDL and replicated service tables.
+PyClickHouseMigrator is a CLI tool for managing ClickHouse schema migrations. It uses plain Python files as migrations — each file contains `up()` and `rollback()` functions that return SQL strings. The tool tracks applied migrations in a ClickHouse table, supports advisory locking for concurrent execution protection, checksum validation to detect modified migrations, dry-run mode, and cluster support with `ON CLUSTER` DDL and replicated service tables.
 
 Dependencies: `clickhouse-driver` and `click`. No ORM, no SQLAlchemy, no heavy frameworks.
 
@@ -262,7 +262,7 @@ The `up` and `rollback` columns store the SQL text at the time of application, s
 
 Rollback deletes the row from `db_migrations` using a lightweight `DELETE` with `mutations_sync=1`.
 
-### Distributed Locking
+### Locking
 
 The lock prevents concurrent migration runs (e.g. multiple CI/CD runners deploying simultaneously).
 
@@ -385,7 +385,7 @@ Public exports from `py_clickhouse_migrator`: `Migrator`, `MigrationLock`, `Lock
 
 **SQL splitting by `;`.** Migration SQL is split into statements by `;`. Semicolons inside string literals will break parsing. If you need a literal `;` in a value, use a separate migration or encode the value differently.
 
-**Lock is best-effort.** The distributed lock uses `ReplacingMergeTree` with `FINAL` queries. Due to ClickHouse's eventual consistency model, there is a theoretical race window. In practice, with `insert_quorum: auto` in cluster mode, this is safe for typical CI/CD scenarios.
+**Advisory lock.** The locking mechanism is best-effort, not a true distributed mutex. There is a race condition window of a few milliseconds between INSERT and verification where two processes could both acquire the lock. If you need stronger guarantees, run migrations from a single process (e.g. a Kubernetes Job or a CI/CD pipeline step).
 
 **Async mutations.** The `DELETE` used during rollback runs with `mutations_sync=1` to wait for completion. The `ALTER TABLE UPDATE` used by `repair` also uses `mutations_sync=1`. These are synchronous within a single node but may take time on large tables.
 
