@@ -1,6 +1,15 @@
 Change log
 ==========
 
+1.1.0 (30/03/2026)
+-------------------
+- New --send-receive-timeout option
+- Docker image (Docker Hub)
+- llms.txt / llms-full.txt
+- Distributed lock fixes (ownership check, server-side timestamps, UUID suffix, TTL 600s)
+- Checksum computed from SQL output instead of file content
+- Removed unused termcolor dependency
+
 1.0.0 (22/03/2026)
 -------------------
 - Distributed locking with TTL
