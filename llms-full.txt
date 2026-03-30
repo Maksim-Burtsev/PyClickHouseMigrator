@@ -37,6 +37,7 @@ These options apply to all commands and can be set via environment variables:
 | `--cluster` | `CLICKHOUSE_MIGRATE_CLUSTER` | (empty) | Cluster name for ON CLUSTER DDL |
 | `--connect-retries` | `CLICKHOUSE_MIGRATE_CONNECT_RETRIES` | `0` | Connection retry attempts |
 | `--connect-retries-interval` | `CLICKHOUSE_MIGRATE_CONNECT_RETRIES_INTERVAL` | `1` | Seconds between retries |
+| `--send-receive-timeout` | `CLICKHOUSE_MIGRATE_SEND_RECEIVE_TIMEOUT` | `600` | Query timeout in seconds |
 | `-v, --verbose` | — | off | Enable DEBUG logging |
 | `-q, --quiet` | — | off | Suppress all output except errors |
 | `--version` | — | — | Show version and exit |
@@ -98,7 +99,7 @@ migrator up --allow-dirty  # skip checksum validation
 |-----------------|---------|-------------|
 | `N` | all | Number of migrations to apply (positional, optional) |
 | `--lock / --no-lock` | `--lock` | Enable/disable distributed lock |
-| `--lock-ttl` | `300` | Lock TTL in seconds (min: 1) |
+| `--lock-ttl` | `600` | Lock TTL in seconds (min: 1) |
 | `--lock-retry` | `3` | Lock acquire retry attempts (min: 0) |
 | `--dry-run` | off | Print SQL without executing |
 | `--allow-dirty` | off | Skip checksum validation for modified files |
@@ -126,7 +127,7 @@ migrator rollback --dry-run
 |-----------------|---------|-------------|
 | `N` | `1` | Number of migrations to rollback (positional, optional) |
 | `--lock / --no-lock` | `--lock` | Enable/disable distributed lock |
-| `--lock-ttl` | `300` | Lock TTL in seconds |
+| `--lock-ttl` | `600` | Lock TTL in seconds |
 | `--lock-retry` | `3` | Lock acquire retry attempts |
 | `--dry-run` | off | Print SQL without executing |
 
@@ -312,6 +313,7 @@ All configuration can be provided via CLI options, environment variables, or a m
 | `--cluster` | `CLICKHOUSE_MIGRATE_CLUSTER` | — | string |
 | `--connect-retries` | `CLICKHOUSE_MIGRATE_CONNECT_RETRIES` | `0` | int (min 0) |
 | `--connect-retries-interval` | `CLICKHOUSE_MIGRATE_CONNECT_RETRIES_INTERVAL` | `1` | int (min 0) |
+| `--send-receive-timeout` | `CLICKHOUSE_MIGRATE_SEND_RECEIVE_TIMEOUT` | `600` | int |
 | `-v, --verbose` | — | off | flag |
 | `-q, --quiet` | — | off | flag |
 
@@ -371,7 +373,7 @@ migrator = Migrator(
 migrator.up()
 ```
 
-The `Migrator` class accepts the same parameters as the CLI global options: `database_url`, `migrations_dir`, `cluster`, `connect_retries`, `connect_retries_interval`.
+The `Migrator` class accepts the same parameters as the CLI global options: `database_url`, `migrations_dir`, `cluster`, `connect_retries`, `connect_retries_interval`, `send_receive_timeout`.
 
 Key public methods: `up()`, `rollback()`, `show_migrations()`, `validate_checksums()`, `repair()`.
 

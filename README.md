@@ -89,7 +89,7 @@ migrator up 3        # apply next 3
 |--------|---------|-------------|
 | `N` | all | Number of migrations to apply |
 | `--lock / --no-lock` | `--lock` | Enable/disable distributed lock |
-| `--lock-ttl` | `300` | Lock TTL in seconds |
+| `--lock-ttl` | `600` | Lock TTL in seconds |
 | `--lock-retry` | `3` | Lock acquire retry attempts |
 | `--dry-run` | off | Print SQL without executing |
 | `--allow-dirty` | off | Skip checksum validation |
@@ -114,7 +114,7 @@ migrator rollback 3      # rollback last 3
 |--------|---------|-------------|
 | `N` | `1` | Number of migrations to rollback |
 | `--lock / --no-lock` | `--lock` | Enable/disable distributed lock |
-| `--lock-ttl` | `300` | Lock TTL in seconds |
+| `--lock-ttl` | `600` | Lock TTL in seconds |
 | `--lock-retry` | `3` | Lock acquire retry attempts |
 | `--dry-run` | off | Print SQL without executing |
 
@@ -188,6 +188,7 @@ All global options can be set via environment variables:
 | `--cluster` | `CLICKHOUSE_MIGRATE_CLUSTER` | — | Cluster name for ON CLUSTER DDL |
 | `--connect-retries` | `CLICKHOUSE_MIGRATE_CONNECT_RETRIES` | `0` | Connection retry attempts |
 | `--connect-retries-interval` | `CLICKHOUSE_MIGRATE_CONNECT_RETRIES_INTERVAL` | `1` | Seconds between retries |
+| `--send-receive-timeout` | `CLICKHOUSE_MIGRATE_SEND_RECEIVE_TIMEOUT` | `600` | Query timeout in seconds |
 | `-v, --verbose` | — | off | Enable DEBUG logging |
 | `-q, --quiet` | — | off | Suppress all output except errors |
 
@@ -213,7 +214,7 @@ Pin to a major version tag (`:1`) or an exact version (`:1.0.0`).
 
 When multiple CI/CD runners or replicas run `migrator up` simultaneously, the distributed lock prevents double-applying migrations. Enabled by default on `up` and `rollback`.
 
-The lock uses a dedicated table with TTL-based expiration (default 300 seconds) and automatic retry (default 3 attempts).
+The lock uses a dedicated table with TTL-based expiration (default 600 seconds) and automatic retry (default 3 attempts). If you increase `--send-receive-timeout`, increase `--lock-ttl` accordingly.
 
 If a deployment crashes mid-migration and the lock isn't released, use `lock-info` to inspect and `force-unlock` to release it manually. Locks also expire automatically after the TTL.
 
