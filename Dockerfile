@@ -1,4 +1,4 @@
-FROM python:3.13-slim
+FROM python:3.14-slim
 
 LABEL maintainer="Maksim Burtsev <zadrot-lol@list.ru>"
 LABEL description="Python CLI tool for ClickHouse schema migrations"
