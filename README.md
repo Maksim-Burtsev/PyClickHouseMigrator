@@ -208,7 +208,7 @@ docker run --rm \
 
 Mount your migrations directory to `/migrations` inside the container.
 
-Pin to a major version tag (`:1`) or an exact version (`:1.0.0`).
+Pin to a major version tag (`:1`) or an exact version (`:1.1.0`).
 
 ## Locking
 
