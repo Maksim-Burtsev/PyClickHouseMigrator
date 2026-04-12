@@ -1,12 +1,9 @@
 import datetime as dt
 import hashlib
-import textwrap
-import importlib.util
 import logging
 import os
 import re
 import time
-import types
 from dataclasses import dataclass, field
 from typing import Final, NamedTuple
 
@@ -22,6 +19,8 @@ ClickHouseSettings = dict[str, str | int]
 _SQL_IDENTIFIER_RE: Final[re.Pattern[str]] = re.compile(r"[a-zA-Z_][a-zA-Z0-9_]*\Z")  # cluster name, db name
 _UNKNOWN_DATABASE_CODE: Final[int] = 81
 _MIGRATION_NAME_RE: Final[re.Pattern[str]] = re.compile(r"[a-zA-Z0-9_]+\Z")  # migration name suffix in filename
+_UP_MARKER: Final[str] = "-- migrator:up"
+_DOWN_MARKER: Final[str] = "-- migrator:down"
 
 _CLUSTER_SETTINGS: ClickHouseSettings = {
     "insert_quorum": "auto",
@@ -29,16 +28,11 @@ _CLUSTER_SETTINGS: ClickHouseSettings = {
 }
 
 
-MIGRATION_TEMPLATE: str = '''
-def up() -> str:
-    return """
-    """
+MIGRATION_TEMPLATE: str = """-- migrator:up
 
 
-def rollback() -> str:
-    return """
-    """
-'''
+-- migrator:down
+"""
 DEFAULT_MIGRATIONS_DIR: str = "./db/migrations"
 
 
@@ -76,14 +70,47 @@ def normalize_content(content: str) -> str:
     return "\n".join(lines)
 
 
-def _load_migration(filepath: str) -> types.ModuleType | None:
-    name = os.path.basename(filepath)
-    spec = importlib.util.spec_from_file_location(name, filepath)
-    if spec is None or spec.loader is None:
-        return None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+def _strip_blank_edges(lines: list[str]) -> str:
+    start = 0
+    end = len(lines)
+    while start < end and not lines[start].strip():
+        start += 1
+    while end > start and not lines[end - 1].strip():
+        end -= 1
+    return "\n".join(lines[start:end])
+
+
+def _parse_sql_migration(filepath: str) -> tuple[str, str]:
+    try:
+        with open(filepath, encoding="utf-8") as f:
+            content = f.read()
+    except OSError as exc:
+        raise InvalidMigrationError(f"Cannot load migration: {filepath}") from exc
+
+    lines = content.splitlines()
+    up_lines: list[int] = []
+    down_lines: list[int] = []
+
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped == _UP_MARKER:
+            up_lines.append(index)
+        elif stripped == _DOWN_MARKER:
+            down_lines.append(index)
+
+    if len(up_lines) != 1 or len(down_lines) != 1:
+        raise InvalidMigrationError(
+            f"Migration {filepath} must contain exactly one '{_UP_MARKER}' and one '{_DOWN_MARKER}' section."
+        )
+
+    up_index = up_lines[0]
+    down_index = down_lines[0]
+    if down_index <= up_index:
+        raise InvalidMigrationError(f"Migration {filepath} must declare '{_UP_MARKER}' before '{_DOWN_MARKER}'.")
+
+    up_sql = _strip_blank_edges(lines[up_index + 1 : down_index])
+    rollback_sql = _strip_blank_edges(lines[down_index + 1 :])
+    return up_sql, rollback_sql
 
 
 def compute_checksum(up: str, rollback: str) -> str:
@@ -112,7 +139,7 @@ def make_migration_filename(name: str = "") -> str:
     filename = dt.datetime.now().strftime("%Y%m%d%H%M%S")
     if name:
         filename += f"_{name}"
-    filename += ".py"
+    filename += ".sql"
     return filename
 
 
@@ -124,7 +151,7 @@ def create_migration_file(migrations_dir: str = DEFAULT_MIGRATIONS_DIR, name: st
     filename = make_migration_filename(name)
     filepath = os.path.join(migrations_dir, filename)
     try:
-        with open(filepath, "w") as f:
+        with open(filepath, "w", encoding="utf-8") as f:
             f.write(MIGRATION_TEMPLATE)
     except FileNotFoundError:
         raise MigrationDirectoryNotFoundError(
@@ -252,7 +279,7 @@ class Migrator(object):
                 if i > 0:
                     click.echo("")
                 click.echo(click.style(f"-- {migration.name} (up)", fg="cyan", bold=True))
-                click.echo(textwrap.dedent(migration.up).strip())
+                click.echo(migration.up.strip())
                 continue
             self.apply_migration(query=migration.up)
             self.save_applied_migration(
@@ -271,7 +298,7 @@ class Migrator(object):
                 if i > 0:
                     click.echo("")
                 click.echo(click.style(f"-- {migration.name} (rollback)", fg="yellow", bold=True))
-                click.echo(textwrap.dedent(migration.rollback).strip())
+                click.echo(migration.rollback.strip())
                 continue
             self.apply_migration(
                 query=migration.rollback,
@@ -301,14 +328,10 @@ class Migrator(object):
         result: list[Migration] = []
         for filename in filenames:
             filepath = f"{self.migrations_dir}/{filename}"
-            module = _load_migration(filepath)
-            if module is None:
-                raise InvalidMigrationError(f"Cannot load migration: {filepath}")
-            up: str = module.up()
+            up, rollback = _parse_sql_migration(filepath)
             if not up.strip():
                 logger.warning("Skip empty migration: %s", filename)
                 continue
-            rollback = module.rollback()
             result.append(
                 Migration(
                     name=filename,
@@ -321,7 +344,7 @@ class Migrator(object):
         return result
 
     def get_unapplied_migration_names(self) -> list[str]:
-        filenames: list[str] = [file for file in os.listdir(self.migrations_dir) if file.endswith(".py")]
+        filenames: list[str] = [file for file in os.listdir(self.migrations_dir) if file.endswith(".sql")]
         applied_migrations: list[str] = self.get_applied_migrations_names()
         return sorted(list(set(filenames) - set(applied_migrations)))
 
@@ -367,12 +390,10 @@ class Migrator(object):
             if not os.path.exists(filepath):
                 mismatches.append(ChecksumMismatch(name, stored_checksum, ""))
                 continue
-            module = _load_migration(filepath)
-            if module is None:
-                continue
+            up, rollback = _parse_sql_migration(filepath)
             actual_checksum = compute_checksum(
-                up=module.up(),
-                rollback=module.rollback(),
+                up=up,
+                rollback=rollback,
             )
             if actual_checksum != stored_checksum:
                 mismatches.append(ChecksumMismatch(name, stored_checksum, actual_checksum))
