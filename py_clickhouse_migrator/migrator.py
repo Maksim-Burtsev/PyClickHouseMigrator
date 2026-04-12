@@ -11,6 +11,8 @@ import click
 from clickhouse_driver import Client
 from clickhouse_driver.errors import ServerException
 
+from py_clickhouse_migrator.migration_parser import MigrationParseError, parse_migration_file
+
 logger = logging.getLogger("py_clickhouse_migrator")
 
 SQL = str
@@ -19,8 +21,6 @@ ClickHouseSettings = dict[str, str | int]
 _SQL_IDENTIFIER_RE: Final[re.Pattern[str]] = re.compile(r"[a-zA-Z_][a-zA-Z0-9_]*\Z")  # cluster name, db name
 _UNKNOWN_DATABASE_CODE: Final[int] = 81
 _MIGRATION_NAME_RE: Final[re.Pattern[str]] = re.compile(r"[a-zA-Z0-9_]+\Z")  # migration name suffix in filename
-_UP_MARKER: Final[str] = "-- migrator:up"
-_DOWN_MARKER: Final[str] = "-- migrator:down"
 
 _CLUSTER_SETTINGS: ClickHouseSettings = {
     "insert_quorum": "auto",
@@ -68,49 +68,6 @@ class ShowMigrationsResult(NamedTuple):
 def normalize_content(content: str) -> str:
     lines = [line.rstrip() for line in content.splitlines() if line.strip()]
     return "\n".join(lines)
-
-
-def _strip_blank_edges(lines: list[str]) -> str:
-    start = 0
-    end = len(lines)
-    while start < end and not lines[start].strip():
-        start += 1
-    while end > start and not lines[end - 1].strip():
-        end -= 1
-    return "\n".join(lines[start:end])
-
-
-def _parse_sql_migration(filepath: str) -> tuple[str, str]:
-    try:
-        with open(filepath, encoding="utf-8") as f:
-            content = f.read()
-    except OSError as exc:
-        raise InvalidMigrationError(f"Cannot load migration: {filepath}") from exc
-
-    lines = content.splitlines()
-    up_lines: list[int] = []
-    down_lines: list[int] = []
-
-    for index, line in enumerate(lines):
-        stripped = line.strip()
-        if stripped == _UP_MARKER:
-            up_lines.append(index)
-        elif stripped == _DOWN_MARKER:
-            down_lines.append(index)
-
-    if len(up_lines) != 1 or len(down_lines) != 1:
-        raise InvalidMigrationError(
-            f"Migration {filepath} must contain exactly one '{_UP_MARKER}' and one '{_DOWN_MARKER}' section."
-        )
-
-    up_index = up_lines[0]
-    down_index = down_lines[0]
-    if down_index <= up_index:
-        raise InvalidMigrationError(f"Migration {filepath} must declare '{_UP_MARKER}' before '{_DOWN_MARKER}'.")
-
-    up_sql = _strip_blank_edges(lines[up_index + 1 : down_index])
-    rollback_sql = _strip_blank_edges(lines[down_index + 1 :])
-    return up_sql, rollback_sql
 
 
 def compute_checksum(up: str, rollback: str) -> str:
@@ -319,6 +276,12 @@ class Migrator(object):
             except ServerException as exc:
                 raise InvalidMigrationError(f"Query {query} raise error: {exc}") from exc
 
+    def _parse_migration(self, filepath: str) -> tuple[str, str]:
+        try:
+            return parse_migration_file(filepath)
+        except MigrationParseError as exc:
+            raise InvalidMigrationError(str(exc)) from exc
+
     def get_migrations_for_apply(self, number: int | None = None) -> list[Migration]:
         filenames: list[str] = self.get_unapplied_migration_names()
 
@@ -328,7 +291,7 @@ class Migrator(object):
         result: list[Migration] = []
         for filename in filenames:
             filepath = f"{self.migrations_dir}/{filename}"
-            up, rollback = _parse_sql_migration(filepath)
+            up, rollback = self._parse_migration(filepath)
             if not up.strip():
                 logger.warning("Skip empty migration: %s", filename)
                 continue
@@ -390,7 +353,7 @@ class Migrator(object):
             if not os.path.exists(filepath):
                 mismatches.append(ChecksumMismatch(name, stored_checksum, ""))
                 continue
-            up, rollback = _parse_sql_migration(filepath)
+            up, rollback = self._parse_migration(filepath)
             actual_checksum = compute_checksum(
                 up=up,
                 rollback=rollback,
