@@ -7,9 +7,9 @@ import pytest
 from click.testing import CliRunner
 from clickhouse_driver import Client
 
+from py_clickhouse_migrator.errors import ChecksumMismatchError
 from py_clickhouse_migrator.migrator import (
     DEFAULT_MIGRATIONS_DIR,
-    ChecksumMismatchError,
     Migrator,
     compute_checksum,
     normalize_content,

@@ -11,7 +11,16 @@ import click
 from clickhouse_driver import Client
 from clickhouse_driver.errors import ServerException
 
-from py_clickhouse_migrator.migration_parser import MigrationParseError, parse_migration_file
+from py_clickhouse_migrator.errors import (
+    ChecksumMismatchError,
+    ClickHouseServerIsNotHealthyError,
+    DatabaseNotFoundError,
+    InvalidMigrationError,
+    MigrationParseError,
+    MigrationDirectoryNotFoundError,
+    MissingDatabaseUrlError,
+)
+from py_clickhouse_migrator.migration_parser import parse_migration_file
 
 logger = logging.getLogger("py_clickhouse_migrator")
 
@@ -34,24 +43,6 @@ MIGRATION_TEMPLATE: str = """-- migrator:up
 -- migrator:down
 """
 DEFAULT_MIGRATIONS_DIR: str = "./db/migrations"
-
-
-class ClickHouseServerIsNotHealthyError(Exception): ...
-
-
-class MigrationDirectoryNotFoundError(Exception): ...
-
-
-class InvalidMigrationError(Exception): ...
-
-
-class MissingDatabaseUrlError(Exception): ...
-
-
-class DatabaseNotFoundError(Exception): ...
-
-
-class ChecksumMismatchError(Exception): ...
 
 
 class ChecksumMismatch(NamedTuple):

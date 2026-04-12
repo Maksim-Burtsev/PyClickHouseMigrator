@@ -5,7 +5,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from py_clickhouse_migrator.migrator import ClickHouseServerIsNotHealthyError, Migrator
+from py_clickhouse_migrator.errors import ClickHouseServerIsNotHealthyError
+from py_clickhouse_migrator.migrator import Migrator
 
 FAKE_URL = "clickhouse://default@localhost:9000/test"
 

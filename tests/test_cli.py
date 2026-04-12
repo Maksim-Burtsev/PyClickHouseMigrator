@@ -11,18 +11,20 @@ import pytest
 from click.testing import CliRunner
 
 from py_clickhouse_migrator.cli import main
-from py_clickhouse_migrator.lock import LockError, LockInfo
-from py_clickhouse_migrator.migrator import (
-    DEFAULT_MIGRATIONS_DIR,
-    ChecksumMismatch,
+from py_clickhouse_migrator.errors import (
     ChecksumMismatchError,
     ClickHouseServerIsNotHealthyError,
     DatabaseNotFoundError,
     InvalidMigrationError,
-    Migration,
     MigrationDirectoryNotFoundError,
-    Migrator,
     MissingDatabaseUrlError,
+)
+from py_clickhouse_migrator.lock import LockError, LockInfo
+from py_clickhouse_migrator.migrator import (
+    DEFAULT_MIGRATIONS_DIR,
+    ChecksumMismatch,
+    Migration,
+    Migrator,
     ShowMigrationsResult,
 )
 

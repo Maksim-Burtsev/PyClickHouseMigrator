@@ -1,8 +1,7 @@
+from py_clickhouse_migrator.errors import MigrationParseError
+
 _UP_MARKER = "-- migrator:up"
 _DOWN_MARKER = "-- migrator:down"
-
-
-class MigrationParseError(ValueError): ...
 
 
 def _trim_section(lines: list[str]) -> str:

@@ -7,7 +7,8 @@ import pytest
 from click.testing import CliRunner
 
 from py_clickhouse_migrator.cli import main
-from py_clickhouse_migrator.migrator import InvalidMigrationError, Migrator, create_migration_file
+from py_clickhouse_migrator.errors import InvalidMigrationError
+from py_clickhouse_migrator.migrator import Migrator, create_migration_file
 
 FAKE_URL = "clickhouse://default@localhost:9000/default"
 

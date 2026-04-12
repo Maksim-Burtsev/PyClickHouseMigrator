@@ -9,15 +9,17 @@ import click
 import pytest
 from clickhouse_driver import Client
 
-from py_clickhouse_migrator.migrator import (
-    DEFAULT_MIGRATIONS_DIR,
+from py_clickhouse_migrator.errors import (
     ClickHouseServerIsNotHealthyError,
     DatabaseNotFoundError,
     InvalidMigrationError,
-    Migration,
     MigrationDirectoryNotFoundError,
-    Migrator,
     MissingDatabaseUrlError,
+)
+from py_clickhouse_migrator.migrator import (
+    DEFAULT_MIGRATIONS_DIR,
+    Migration,
+    Migrator,
     create_migration_file,
     create_migrations_dir,
 )
