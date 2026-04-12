@@ -109,3 +109,17 @@ def test_accepts_valid_migration_name(tmp_path: pytest.TempPathFactory) -> None:
     filepath = create_migration_file(migrations_dir=path, name="add_users_table")
     assert "add_users_table" in filepath
     assert os.path.exists(filepath)
+
+
+def test_new_sql_migration_template_contains_markers(tmp_path: pytest.TempPathFactory) -> None:
+    path = str(tmp_path / "migrations")
+    os.makedirs(path)
+
+    filepath = create_migration_file(migrations_dir=path, name="create_users")
+
+    with open(filepath, encoding="utf-8") as f:
+        content = f.read()
+
+    assert filepath.endswith(".sql")
+    assert "-- migrator:up" in content
+    assert "-- migrator:down" in content

@@ -1,8 +1,14 @@
+from .errors import (
+    ChecksumMismatchError,
+    ClickHouseServerIsNotHealthyError,
+    DatabaseNotFoundError,
+    InvalidMigrationError,
+    MigrationDirectoryNotFoundError,
+    MissingDatabaseUrlError,
+)
 from .lock import LockError, LockTimeoutError, MigrationLock
 from .migrator import (
     ChecksumMismatch,
-    ChecksumMismatchError,
-    DatabaseNotFoundError,
     Migrator,
     ShowMigrationsResult,
     compute_checksum,
@@ -15,10 +21,14 @@ from .migrator import (
 __all__ = [
     "ChecksumMismatch",
     "ChecksumMismatchError",
+    "ClickHouseServerIsNotHealthyError",
     "DatabaseNotFoundError",
+    "InvalidMigrationError",
     "LockError",
     "LockTimeoutError",
+    "MigrationDirectoryNotFoundError",
     "MigrationLock",
+    "MissingDatabaseUrlError",
     "Migrator",
     "ShowMigrationsResult",
     "compute_checksum",

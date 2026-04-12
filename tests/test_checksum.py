@@ -7,9 +7,9 @@ import pytest
 from click.testing import CliRunner
 from clickhouse_driver import Client
 
+from py_clickhouse_migrator.errors import ChecksumMismatchError
 from py_clickhouse_migrator.migrator import (
     DEFAULT_MIGRATIONS_DIR,
-    ChecksumMismatchError,
     Migrator,
     compute_checksum,
     normalize_content,
@@ -171,7 +171,7 @@ def test_up_skips_validation_for_empty_checksum(migrator: Migrator, migrator_ini
     # insert a legacy migration without checksum
     ch_client.execute(
         "INSERT INTO db_migrations (name, up, rollback, checksum) VALUES",
-        [["legacy.py", "SELECT 1", "SELECT 1", ""]],
+        [["legacy.sql", "SELECT 1", "SELECT 1", ""]],
     )
 
     # create a new pending migration

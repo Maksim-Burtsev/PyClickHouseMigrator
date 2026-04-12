@@ -9,15 +9,17 @@ import click
 import pytest
 from clickhouse_driver import Client
 
-from py_clickhouse_migrator.migrator import (
-    DEFAULT_MIGRATIONS_DIR,
+from py_clickhouse_migrator.errors import (
     ClickHouseServerIsNotHealthyError,
     DatabaseNotFoundError,
     InvalidMigrationError,
-    Migration,
     MigrationDirectoryNotFoundError,
-    Migrator,
     MissingDatabaseUrlError,
+)
+from py_clickhouse_migrator.migrator import (
+    DEFAULT_MIGRATIONS_DIR,
+    Migration,
+    Migrator,
     create_migration_file,
     create_migrations_dir,
 )
@@ -94,7 +96,7 @@ def test_create_new_migration(migrator_init: None) -> None:
     assert len(migration_filenames) == 1
 
     filename: str = migration_filenames[0]
-    assert "_first_migration.py" in filename
+    assert "_first_migration.sql" in filename
 
 
 def test_create_new_migration_without_init() -> None:
@@ -249,7 +251,7 @@ def test_create_migration_file_default_name(migrator_init: None) -> None:
 def test_create_migration_file_with_name(migrator_init: None) -> None:
     filepath = create_migration_file(name="test_migration")
     filename = os.path.basename(filepath)
-    assert "_test_migration.py" in filename
+    assert "_test_migration.sql" in filename
     assert MIGRATION_FILENAME_REGEX.match(filename)
 
 
@@ -561,7 +563,7 @@ def test_new_migration_filename_format(migrator_init: None) -> None:
 def test_new_migration_filename_with_name(migrator_init: None) -> None:
     filepath = create_migration_file(name="create_users")
     filename = os.path.basename(filepath)
-    assert "_create_users.py" in filename
+    assert "_create_users.sql" in filename
     assert MIGRATION_FILENAME_REGEX.match(filename)
 
 
@@ -662,19 +664,29 @@ def test_show_migrations_with_pending(migrator: Migrator, migrator_init: None) -
     assert result.warning == ""
 
 
-def test_get_migrations_for_apply_unloadable_file(migrator: Migrator, migrator_init: None) -> None:
-    """When importlib cannot create a spec, get_migrations_for_apply should raise InvalidMigrationError."""
-    filename = "20990101000000_bad.py"
+def test_get_migrations_for_apply_invalid_sql_file(migrator: Migrator, migrator_init: None) -> None:
+    """A malformed SQL migration file should raise InvalidMigrationError."""
+    filename = "20990101000000_bad.sql"
     filepath = f"{DEFAULT_MIGRATIONS_DIR}/{filename}"
     os.makedirs(DEFAULT_MIGRATIONS_DIR, exist_ok=True)
-    with open(filepath, "w") as f:
-        f.write("# dummy")
+    with open(filepath, "w", encoding="utf-8") as f:
+        f.write("-- migrator:up\nSELECT 1;\n")
 
-    with (
-        patch("py_clickhouse_migrator.migrator.importlib.util.spec_from_file_location", return_value=None),
-        pytest.raises(InvalidMigrationError, match="Cannot load migration"),
-    ):
+    with pytest.raises(InvalidMigrationError, match="must contain exactly one"):
         migrator.get_migrations_for_apply()
+
+
+def test_get_unapplied_migration_names_skips_non_sql_files(migrator: Migrator, migrator_init: None) -> None:
+    create_test_migration(name="real", up="SELECT 1", rollback="")
+    with open(f"{DEFAULT_MIGRATIONS_DIR}/notes.txt", "w", encoding="utf-8") as f:
+        f.write("ignore me")
+    with open(f"{DEFAULT_MIGRATIONS_DIR}/legacy.py", "w", encoding="utf-8") as f:
+        f.write("print('legacy')")
+
+    unapplied = migrator.get_unapplied_migration_names()
+
+    assert len(unapplied) == 1
+    assert unapplied[0].endswith(".sql")
 
 
 @patch.object(Migrator, "check_migrations_table")

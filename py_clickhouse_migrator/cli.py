@@ -5,15 +5,17 @@ import typing as t
 
 import click
 from py_clickhouse_migrator import Migrator
-from py_clickhouse_migrator.lock import LockError, MigrationLock
-from py_clickhouse_migrator.migrator import (
+from py_clickhouse_migrator.errors import (
     ChecksumMismatchError,
     ClickHouseServerIsNotHealthyError,
     DatabaseNotFoundError,
-    DEFAULT_MIGRATIONS_DIR,
     InvalidMigrationError,
     MigrationDirectoryNotFoundError,
     MissingDatabaseUrlError,
+)
+from py_clickhouse_migrator.lock import LockError, MigrationLock
+from py_clickhouse_migrator.migrator import (
+    DEFAULT_MIGRATIONS_DIR,
     create_migration_file,
     create_migrations_dir,
 )

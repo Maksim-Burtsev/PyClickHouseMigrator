@@ -7,16 +7,14 @@ from clickhouse_driver import Client
 
 from py_clickhouse_migrator.migrator import DEFAULT_MIGRATIONS_DIR, make_migration_filename
 
-MIGRATION_FILENAME_REGEX: re.Pattern[str] = re.compile(r"^\d{14}(?:_\w+)*\.py$")
+MIGRATION_FILENAME_REGEX: re.Pattern[str] = re.compile(r"^\d{14}(?:_\w+)*\.sql$")
 
-TEST_MIGRATION_TEMPLATE: str = '''
-def up() -> str:
-    return """{up}"""
+TEST_MIGRATION_TEMPLATE: str = """-- migrator:up
+{up}
 
-
-def rollback() -> str:
-    return """{rollback}"""
-'''
+-- migrator:down
+{rollback}
+"""
 
 
 def table_exists(ch_client: Client, table_name: str) -> bool:
@@ -43,6 +41,6 @@ def create_test_migration(
 ) -> str:
     filename = make_migration_filename(name)
     filepath = os.path.join(migrations_dir, filename)
-    with open(filepath, "w") as f:
+    with open(filepath, "w", encoding="utf-8") as f:
         f.write(TEST_MIGRATION_TEMPLATE.format(up=up, rollback=rollback))
     return filename

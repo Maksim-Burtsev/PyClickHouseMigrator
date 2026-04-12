@@ -1,4 +1,4 @@
-.PHONY: test test-up test-down test-cluster cluster-up cluster-wait cluster-down lint
+.PHONY: test test-up test-down test-cluster test-all cluster-up cluster-wait cluster-down lint
 
 test-up:
 	docker compose -f docker-compose.test.yml up -d --wait
@@ -22,6 +22,10 @@ cluster-down:
 test-cluster: cluster-up cluster-wait
 	uv run pytest tests/ -m cluster -v
 	$(MAKE) cluster-down
+
+test-all:
+	$(MAKE) test
+	$(MAKE) test-cluster
 
 lint:
 	uv run ruff check .

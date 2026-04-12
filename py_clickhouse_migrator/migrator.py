@@ -1,18 +1,26 @@
 import datetime as dt
 import hashlib
-import textwrap
-import importlib.util
 import logging
 import os
 import re
 import time
-import types
 from dataclasses import dataclass, field
 from typing import Final, NamedTuple
 
 import click
 from clickhouse_driver import Client
 from clickhouse_driver.errors import ServerException
+
+from py_clickhouse_migrator.errors import (
+    ChecksumMismatchError,
+    ClickHouseServerIsNotHealthyError,
+    DatabaseNotFoundError,
+    InvalidMigrationError,
+    MigrationParseError,
+    MigrationDirectoryNotFoundError,
+    MissingDatabaseUrlError,
+)
+from py_clickhouse_migrator.migration_parser import parse_migration_file
 
 logger = logging.getLogger("py_clickhouse_migrator")
 
@@ -29,35 +37,12 @@ _CLUSTER_SETTINGS: ClickHouseSettings = {
 }
 
 
-MIGRATION_TEMPLATE: str = '''
-def up() -> str:
-    return """
-    """
+MIGRATION_TEMPLATE: str = """-- migrator:up
 
 
-def rollback() -> str:
-    return """
-    """
-'''
+-- migrator:down
+"""
 DEFAULT_MIGRATIONS_DIR: str = "./db/migrations"
-
-
-class ClickHouseServerIsNotHealthyError(Exception): ...
-
-
-class MigrationDirectoryNotFoundError(Exception): ...
-
-
-class InvalidMigrationError(Exception): ...
-
-
-class MissingDatabaseUrlError(Exception): ...
-
-
-class DatabaseNotFoundError(Exception): ...
-
-
-class ChecksumMismatchError(Exception): ...
 
 
 class ChecksumMismatch(NamedTuple):
@@ -74,16 +59,6 @@ class ShowMigrationsResult(NamedTuple):
 def normalize_content(content: str) -> str:
     lines = [line.rstrip() for line in content.splitlines() if line.strip()]
     return "\n".join(lines)
-
-
-def _load_migration(filepath: str) -> types.ModuleType | None:
-    name = os.path.basename(filepath)
-    spec = importlib.util.spec_from_file_location(name, filepath)
-    if spec is None or spec.loader is None:
-        return None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
 
 
 def compute_checksum(up: str, rollback: str) -> str:
@@ -112,7 +87,7 @@ def make_migration_filename(name: str = "") -> str:
     filename = dt.datetime.now().strftime("%Y%m%d%H%M%S")
     if name:
         filename += f"_{name}"
-    filename += ".py"
+    filename += ".sql"
     return filename
 
 
@@ -124,7 +99,7 @@ def create_migration_file(migrations_dir: str = DEFAULT_MIGRATIONS_DIR, name: st
     filename = make_migration_filename(name)
     filepath = os.path.join(migrations_dir, filename)
     try:
-        with open(filepath, "w") as f:
+        with open(filepath, "w", encoding="utf-8") as f:
             f.write(MIGRATION_TEMPLATE)
     except FileNotFoundError:
         raise MigrationDirectoryNotFoundError(
@@ -252,7 +227,7 @@ class Migrator(object):
                 if i > 0:
                     click.echo("")
                 click.echo(click.style(f"-- {migration.name} (up)", fg="cyan", bold=True))
-                click.echo(textwrap.dedent(migration.up).strip())
+                click.echo(migration.up.strip())
                 continue
             self.apply_migration(query=migration.up)
             self.save_applied_migration(
@@ -271,7 +246,7 @@ class Migrator(object):
                 if i > 0:
                     click.echo("")
                 click.echo(click.style(f"-- {migration.name} (rollback)", fg="yellow", bold=True))
-                click.echo(textwrap.dedent(migration.rollback).strip())
+                click.echo(migration.rollback.strip())
                 continue
             self.apply_migration(
                 query=migration.rollback,
@@ -292,6 +267,12 @@ class Migrator(object):
             except ServerException as exc:
                 raise InvalidMigrationError(f"Query {query} raise error: {exc}") from exc
 
+    def _parse_migration(self, filepath: str) -> tuple[str, str]:
+        try:
+            return parse_migration_file(filepath)
+        except MigrationParseError as exc:
+            raise InvalidMigrationError(str(exc)) from exc
+
     def get_migrations_for_apply(self, number: int | None = None) -> list[Migration]:
         filenames: list[str] = self.get_unapplied_migration_names()
 
@@ -301,14 +282,10 @@ class Migrator(object):
         result: list[Migration] = []
         for filename in filenames:
             filepath = f"{self.migrations_dir}/{filename}"
-            module = _load_migration(filepath)
-            if module is None:
-                raise InvalidMigrationError(f"Cannot load migration: {filepath}")
-            up: str = module.up()
+            up, rollback = self._parse_migration(filepath)
             if not up.strip():
                 logger.warning("Skip empty migration: %s", filename)
                 continue
-            rollback = module.rollback()
             result.append(
                 Migration(
                     name=filename,
@@ -321,7 +298,7 @@ class Migrator(object):
         return result
 
     def get_unapplied_migration_names(self) -> list[str]:
-        filenames: list[str] = [file for file in os.listdir(self.migrations_dir) if file.endswith(".py")]
+        filenames: list[str] = [file for file in os.listdir(self.migrations_dir) if file.endswith(".sql")]
         applied_migrations: list[str] = self.get_applied_migrations_names()
         return sorted(list(set(filenames) - set(applied_migrations)))
 
@@ -367,12 +344,10 @@ class Migrator(object):
             if not os.path.exists(filepath):
                 mismatches.append(ChecksumMismatch(name, stored_checksum, ""))
                 continue
-            module = _load_migration(filepath)
-            if module is None:
-                continue
+            up, rollback = self._parse_migration(filepath)
             actual_checksum = compute_checksum(
-                up=module.up(),
-                rollback=module.rollback(),
+                up=up,
+                rollback=rollback,
             )
             if actual_checksum != stored_checksum:
                 mismatches.append(ChecksumMismatch(name, stored_checksum, actual_checksum))
