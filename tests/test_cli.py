@@ -92,7 +92,7 @@ def test_cli_new(runner: CliRunner, tmp_path: pytest.TempPathFactory) -> None:
     assert result.exit_code == 0
     files = os.listdir(path)
     assert len(files) == 1
-    assert files[0].endswith("_add_users.py")
+    assert files[0].endswith("_add_users.sql")
 
 
 def test_cli_new_without_name(runner: CliRunner, tmp_path: pytest.TempPathFactory) -> None:
@@ -102,7 +102,7 @@ def test_cli_new_without_name(runner: CliRunner, tmp_path: pytest.TempPathFactor
     assert result.exit_code == 0
     files = os.listdir(path)
     assert len(files) == 1
-    assert files[0].endswith(".py")
+    assert files[0].endswith(".sql")
 
 
 def test_cli_new_default_path(runner: CliRunner) -> None:
@@ -110,7 +110,7 @@ def test_cli_new_default_path(runner: CliRunner) -> None:
     result = runner.invoke(main, ["new", "test_migration"])
     assert result.exit_code == 0
     files = os.listdir(DEFAULT_MIGRATIONS_DIR)
-    assert any(f.endswith("_test_migration.py") for f in files)
+    assert any(f.endswith("_test_migration.sql") for f in files)
 
 
 def test_cli_new_missing_dir(runner: CliRunner, tmp_path: pytest.TempPathFactory) -> None:
@@ -127,7 +127,7 @@ def test_up_dry_run_output_visible_with_quiet(runner: CliRunner) -> None:
     """--quiet must not suppress dry-run output (click.echo, not logger)."""
     migrations = [
         Migration(
-            name="001_create_users.py",
+            name="001_create_users.sql",
             up="CREATE TABLE users (id Int32) ENGINE MergeTree() ORDER BY id",
             rollback="DROP TABLE users",
             checksum="abc123",
@@ -166,7 +166,7 @@ def test_cli_up_no_lock(runner: CliRunner, mock_migrator: MagicMock) -> None:
 
 
 def test_cli_up_with_lock_and_pending(runner: CliRunner, mock_migrator: MagicMock) -> None:
-    mock_migrator.get_unapplied_migration_names.return_value = ["001.py"]
+    mock_migrator.get_unapplied_migration_names.return_value = ["001.sql"]
     mock_migrator.get_db_name.return_value = "test"
     mock_migrator.ch_client = MagicMock()
 
@@ -205,7 +205,7 @@ def test_cli_up_with_number(runner: CliRunner, mock_migrator: MagicMock) -> None
 def test_rollback_dry_run_output_visible_with_quiet(runner: CliRunner) -> None:
     migrations = [
         Migration(
-            name="001_create_users.py",
+            name="001_create_users.sql",
             up="CREATE TABLE users (id Int32) ENGINE MergeTree() ORDER BY id",
             rollback="DROP TABLE users",
         ),
@@ -297,9 +297,9 @@ def test_cli_repair_nothing(runner: CliRunner, mock_migrator: MagicMock) -> None
 
 def test_cli_repair_with_mismatch(runner: CliRunner, mock_migrator: MagicMock) -> None:
     mock_migrator.validate_checksums.return_value = [
-        ChecksumMismatch("001.py", "aaa111bbb222ccc", "ddd444eee555fff"),
+        ChecksumMismatch("001.sql", "aaa111bbb222ccc", "ddd444eee555fff"),
     ]
-    mock_migrator.repair.return_value = ["001.py"]
+    mock_migrator.repair.return_value = ["001.sql"]
     result = runner.invoke(main, ["--url", FAKE_URL, "repair"])
     assert result.exit_code == 0
     assert "Modified migrations:" in result.output
@@ -308,7 +308,7 @@ def test_cli_repair_with_mismatch(runner: CliRunner, mock_migrator: MagicMock) -
 
 def test_cli_repair_missing_file(runner: CliRunner, mock_migrator: MagicMock) -> None:
     mock_migrator.validate_checksums.return_value = [
-        ChecksumMismatch("001.py", "aaa111bbb222ccc", ""),
+        ChecksumMismatch("001.sql", "aaa111bbb222ccc", ""),
     ]
     mock_migrator.repair.return_value = []
     result = runner.invoke(main, ["--url", FAKE_URL, "repair"])
