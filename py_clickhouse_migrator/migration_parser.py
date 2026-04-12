@@ -1,7 +1,10 @@
+from pathlib import Path
+from typing import Final
+
 from py_clickhouse_migrator.errors import MigrationParseError
 
-_UP_MARKER = "-- migrator:up"
-_DOWN_MARKER = "-- migrator:down"
+_UP_MARKER: Final[str] = "-- migrator:up"
+_DOWN_MARKER: Final[str] = "-- migrator:down"
 
 
 def _trim_section(lines: list[str]) -> str:
@@ -14,23 +17,20 @@ def _trim_section(lines: list[str]) -> str:
     return "\n".join(lines[start:end])
 
 
-def parse_migration_file(filepath: str) -> tuple[str, str]:
+def _read_migration_file(filepath: str) -> str:
     try:
-        with open(filepath, encoding="utf-8") as f:
-            content = f.read()
+        return Path(filepath).read_text(encoding="utf-8")
     except OSError as exc:
         raise MigrationParseError(f"Cannot load migration: {filepath}") from exc
 
-    lines = content.splitlines()
-    up_lines: list[int] = []
-    down_lines: list[int] = []
 
-    for index, line in enumerate(lines):
-        stripped = line.strip()
-        if stripped == _UP_MARKER:
-            up_lines.append(index)
-        elif stripped == _DOWN_MARKER:
-            down_lines.append(index)
+def _find_marker_indexes(lines: list[str], marker: str) -> list[int]:
+    return [index for index, line in enumerate(lines) if line.strip() == marker]
+
+
+def _find_section_indexes(lines: list[str], filepath: str) -> tuple[int, int]:
+    up_lines = _find_marker_indexes(lines, _UP_MARKER)
+    down_lines = _find_marker_indexes(lines, _DOWN_MARKER)
 
     if len(up_lines) != 1 or len(down_lines) != 1:
         raise MigrationParseError(
@@ -41,6 +41,13 @@ def parse_migration_file(filepath: str) -> tuple[str, str]:
     down_index = down_lines[0]
     if down_index <= up_index:
         raise MigrationParseError(f"Migration {filepath} must declare '{_UP_MARKER}' before '{_DOWN_MARKER}'.")
+
+    return up_index, down_index
+
+
+def parse_migration_file(filepath: str) -> tuple[str, str]:
+    lines = _read_migration_file(filepath).splitlines()
+    up_index, down_index = _find_section_indexes(lines, filepath)
 
     up_sql = _trim_section(lines[up_index + 1 : down_index])
     rollback_sql = _trim_section(lines[down_index + 1 :])
