@@ -519,6 +519,19 @@ def test_up_dry_run_with_number(migrator: Migrator, migrator_init: None, ch_clie
     assert len(migrator.get_unapplied_migration_names()) == 2
 
 
+def test_get_unapplied_migration_names_sorted_by_filename(migrator: Migrator, migrator_init: None) -> None:
+    os.makedirs(DEFAULT_MIGRATIONS_DIR, exist_ok=True)
+    filenames = [
+        "20260413010101002_b.sql",
+        "20260413010101001_a.sql",
+    ]
+    for filename in filenames:
+        with open(f"{DEFAULT_MIGRATIONS_DIR}/{filename}", "w", encoding="utf-8") as f:
+            f.write("-- migrator:up\nSELECT 1;\n\n-- migrator:down\nSELECT 1;\n")
+
+    assert migrator.get_unapplied_migration_names() == sorted(filenames)
+
+
 def test_rollback_dry_run_does_not_rollback(
     migrator: Migrator, test_table_from_migration: str, ch_client: Client
 ) -> None:
@@ -550,13 +563,13 @@ def test_rollback_dry_run_multiple(
 
 
 def test_new_migration_filename_format(migrator_init: None) -> None:
-    """Filename should be 14 digits (YYYYMMDDHHmmSS) without microseconds."""
+    """Filename should be 17 digits (YYYYMMDDHHmmSSmmm) with millisecond precision."""
     filepath = create_migration_file(name="test")
     filename = os.path.basename(filepath)
     assert MIGRATION_FILENAME_REGEX.match(filename)
-    # 14 digits before _
+    # 17 digits before _
     stem = filename.split("_", maxsplit=1)[0]
-    assert len(stem) == 14
+    assert len(stem) == 17
     assert stem.isdigit()
 
 

@@ -7,7 +7,7 @@ from clickhouse_driver import Client
 
 from py_clickhouse_migrator.migrator import DEFAULT_MIGRATIONS_DIR, make_migration_filename
 
-MIGRATION_FILENAME_REGEX: re.Pattern[str] = re.compile(r"^\d{14}(?:_\w+)*\.sql$")
+MIGRATION_FILENAME_REGEX: re.Pattern[str] = re.compile(r"^\d{17}(?:_\w+)*\.sql$")
 
 TEST_MIGRATION_TEMPLATE: str = """-- migrator:up
 {up}

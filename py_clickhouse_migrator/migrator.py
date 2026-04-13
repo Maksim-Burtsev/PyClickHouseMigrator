@@ -81,10 +81,10 @@ def create_migrations_dir(migrations_dir: str = DEFAULT_MIGRATIONS_DIR) -> None:
 
 
 def make_migration_filename(name: str = "") -> str:
-    """Generate a timestamped migration filename."""
+    """Generate a timestamped migration filename with millisecond precision."""
     if name and not _MIGRATION_NAME_RE.match(name):
         raise ValueError(f"Invalid migration name: '{name}'. Use only letters, digits, and underscores.")
-    filename = dt.datetime.now().strftime("%Y%m%d%H%M%S")
+    filename = dt.datetime.now().strftime("%Y%m%d%H%M%S%f")[:-3]
     if name:
         filename += f"_{name}"
     filename += ".sql"
@@ -298,14 +298,20 @@ class Migrator(object):
         return result
 
     def get_unapplied_migration_names(self) -> list[str]:
-        filenames: list[str] = [file for file in os.listdir(self.migrations_dir) if file.endswith(".sql")]
-        applied_migrations: list[str] = self.get_applied_migrations_names()
-        return sorted(list(set(filenames) - set(applied_migrations)))
+        applied_migrations = set(self.get_applied_migrations_names())
+        return sorted(
+            filename
+            for filename in os.listdir(self.migrations_dir)
+            if filename.endswith(".sql") and filename not in applied_migrations
+        )
 
     def get_applied_migrations_names(self) -> list[str]:
         return [
             row[0]
-            for row in self.ch_client.execute("SELECT name FROM db_migrations ORDER BY dt", settings=self._settings)
+            for row in self.ch_client.execute(
+                "SELECT name FROM db_migrations ORDER BY dt",
+                settings=self._settings,
+            )
         ]
 
     def get_migrations_for_rollback(self, number: int = 1) -> list[Migration]:
