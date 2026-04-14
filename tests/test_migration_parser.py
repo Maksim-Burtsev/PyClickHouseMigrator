@@ -8,9 +8,11 @@ from py_clickhouse_migrator.errors import MigrationParseError
 from py_clickhouse_migrator.migration_parser import (
     _find_marker_indexes,
     _find_section_indexes,
+    _parse_statement_blocks,
     _read_migration_file,
     _trim_section,
     parse_migration_file,
+    parse_migration_statements,
 )
 
 
@@ -174,3 +176,144 @@ def test_parse_migration_file_raises_when_down_is_before_up(tmp_path: Path) -> N
 
     with pytest.raises(MigrationParseError, match="must declare '-- migrator:up' before '-- migrator:down'"):
         parse_migration_file(str(filepath))
+
+
+def test_parse_statement_blocks_trims_edges_and_preserves_inner_content() -> None:
+    lines = [
+        "-- @stmt",
+        "",
+        "SELECT 1;",
+        "",
+        "-- comment inside statement",
+        "-- @stmt",
+        "  ",
+        "SELECT",
+        "    2;",
+        "",
+    ]
+
+    statements = _parse_statement_blocks(lines, "-- migrator:up")
+
+    assert statements == [
+        "SELECT 1;\n\n-- comment inside statement",
+        "SELECT\n    2;",
+    ]
+
+
+def test_parse_statement_blocks_allows_empty_down_section() -> None:
+    assert _parse_statement_blocks(["", "   "], "-- migrator:down") == []
+
+
+def test_parse_statement_blocks_ignores_empty_down_statement_blocks() -> None:
+    lines = [
+        "-- @stmt",
+        "",
+        "   ",
+        "-- @stmt",
+        "",
+    ]
+
+    statements = _parse_statement_blocks(lines, "-- migrator:down")
+
+    assert statements == []
+
+
+def test_parse_migration_statements_requires_non_empty_up_statement_when_only_empty_blocks_present(
+    tmp_path: Path,
+) -> None:
+    filepath = tmp_path / "20260412120000_bad.sql"
+    filepath.write_text(
+        "-- migrator:up\n-- @stmt\n\n-- migrator:down\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(MigrationParseError, match="must contain at least one non-empty '-- @stmt' block"):
+        parse_migration_statements(str(filepath))
+
+
+def test_parse_migration_statements_requires_non_empty_up_statement_when_section_is_empty(tmp_path: Path) -> None:
+    filepath = tmp_path / "20260412120000_bad.sql"
+    filepath.write_text(
+        "-- migrator:up\n\n-- migrator:down\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(MigrationParseError, match="must contain at least one non-empty '-- @stmt' block"):
+        parse_migration_statements(str(filepath))
+
+
+def test_parse_statement_blocks_does_not_require_non_empty_up_on_its_own() -> None:
+    lines = [
+        "-- @stmt",
+        "",
+        "   ",
+    ]
+
+    assert _parse_statement_blocks(lines, "-- migrator:up") == []
+
+
+@pytest.mark.parametrize(
+    "lines",
+    [
+        ["SELECT 1;"],
+        ["-- some comment", "-- @stmt", "SELECT 1;"],
+        ["", "SELECT 1;"],
+    ],
+)
+def test_parse_statement_blocks_rejects_non_empty_content_outside_statement_blocks(lines: list[str]) -> None:
+    with pytest.raises(MigrationParseError, match="outside '-- @stmt' blocks"):
+        _parse_statement_blocks(lines, "-- migrator:up")
+
+
+def test_parse_migration_statements_parses_up_and_down_blocks(tmp_path: Path) -> None:
+    filepath = tmp_path / "20260412120000_create_users.sql"
+    filepath.write_text(
+        "-- migrator:up\n"
+        "\n"
+        "-- @stmt\n"
+        "CREATE TABLE users (\n"
+        "    id UInt64\n"
+        ") ENGINE = MergeTree()\n"
+        "ORDER BY id;\n"
+        "\n"
+        "-- @stmt\n"
+        "-- regular SQL comments inside the statement are preserved\n"
+        "INSERT INTO users VALUES (1);\n"
+        "\n"
+        "-- migrator:down\n"
+        "-- @stmt\n"
+        "DROP TABLE IF EXISTS users;\n",
+        encoding="utf-8",
+    )
+
+    up_statements, rollback_statements = parse_migration_statements(str(filepath))
+
+    assert up_statements == [
+        "CREATE TABLE users (\n    id UInt64\n) ENGINE = MergeTree()\nORDER BY id;",
+        "-- regular SQL comments inside the statement are preserved\nINSERT INTO users VALUES (1);",
+    ]
+    assert rollback_statements == ["DROP TABLE IF EXISTS users;"]
+
+
+def test_parse_migration_statements_allows_empty_down_section(tmp_path: Path) -> None:
+    filepath = tmp_path / "20260412120000_empty_down.sql"
+    filepath.write_text(
+        "-- migrator:up\n-- @stmt\nSELECT 1;\n\n-- migrator:down\n",
+        encoding="utf-8",
+    )
+
+    up_statements, rollback_statements = parse_migration_statements(str(filepath))
+
+    assert up_statements == ["SELECT 1;"]
+    assert rollback_statements == []
+
+
+def test_parse_migration_statements_rejects_sql_outside_statement_blocks(tmp_path: Path) -> None:
+    filepath = tmp_path / "20260412120000_bad.sql"
+    filepath.write_text(
+        "-- migrator:up\nSELECT 1;\n-- migrator:down\n-- @stmt\nSELECT 2;\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(MigrationParseError, match=r"Migration .+ outside '-- @stmt' blocks"):
+        parse_migration_statements(str(filepath))

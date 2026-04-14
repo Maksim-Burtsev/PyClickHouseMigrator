@@ -5,6 +5,7 @@ from py_clickhouse_migrator.errors import MigrationParseError
 
 _UP_MARKER: Final[str] = "-- migrator:up"
 _DOWN_MARKER: Final[str] = "-- migrator:down"
+_STATEMENT_MARKER: Final[str] = "-- @stmt"
 
 
 def _trim_section(lines: list[str]) -> str:
@@ -52,3 +53,52 @@ def parse_migration_file(filepath: str) -> tuple[str, str]:
     up_sql = _trim_section(lines[up_index + 1 : down_index])
     rollback_sql = _trim_section(lines[down_index + 1 :])
     return up_sql, rollback_sql
+
+
+def _parse_statement_blocks(lines: list[str], section_marker: str) -> list[str]:
+    statements: list[str] = []
+    current_block: list[str] | None = None
+
+    for line in lines:
+        stripped_line = line.strip()
+        if stripped_line == _STATEMENT_MARKER:
+            if current_block is not None:
+                statement = _trim_section(current_block)
+                if statement:
+                    statements.append(statement)
+            current_block = []
+            continue
+
+        if current_block is None:
+            if stripped_line:
+                raise MigrationParseError(
+                    f"Non-empty content in '{section_marker}' outside '{_STATEMENT_MARKER}' blocks."
+                )
+            continue
+
+        current_block.append(line)
+
+    if current_block is not None:
+        statement = _trim_section(current_block)
+        if statement:
+            statements.append(statement)
+
+    return statements
+
+
+def parse_migration_statements(filepath: str) -> tuple[list[str], list[str]]:
+    lines = _read_migration_file(filepath).splitlines()
+    up_index, down_index = _find_section_indexes(lines, filepath)
+
+    try:
+        up_statements = _parse_statement_blocks(lines[up_index + 1 : down_index], _UP_MARKER)
+        rollback_statements = _parse_statement_blocks(lines[down_index + 1 :], _DOWN_MARKER)
+    except MigrationParseError as exc:
+        raise MigrationParseError(f"Migration {filepath}: {exc}") from exc
+
+    if not up_statements:
+        raise MigrationParseError(
+            f"Migration {filepath} must contain at least one non-empty '{_STATEMENT_MARKER}' block in '{_UP_MARKER}'."
+        )
+
+    return up_statements, rollback_statements
