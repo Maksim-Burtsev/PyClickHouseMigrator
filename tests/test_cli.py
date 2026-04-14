@@ -95,6 +95,8 @@ def test_cli_new(runner: CliRunner, tmp_path: pytest.TempPathFactory) -> None:
     files = os.listdir(path)
     assert len(files) == 1
     assert files[0].endswith("_add_users.sql")
+    content = (tmp_path / "migrations" / files[0]).read_text(encoding="utf-8")
+    assert content.count("-- @stmt") == 2
 
 
 def test_cli_new_without_name(runner: CliRunner, tmp_path: pytest.TempPathFactory) -> None:
@@ -105,6 +107,8 @@ def test_cli_new_without_name(runner: CliRunner, tmp_path: pytest.TempPathFactor
     files = os.listdir(path)
     assert len(files) == 1
     assert files[0].endswith(".sql")
+    content = (tmp_path / "migrations" / files[0]).read_text(encoding="utf-8")
+    assert content.count("-- @stmt") == 2
 
 
 def test_cli_new_default_path(runner: CliRunner) -> None:

@@ -38,9 +38,11 @@ _CLUSTER_SETTINGS: ClickHouseSettings = {
 
 
 MIGRATION_TEMPLATE: str = """-- migrator:up
+-- @stmt
 
 
 -- migrator:down
+-- @stmt
 """
 DEFAULT_MIGRATIONS_DIR: str = "./db/migrations"
 

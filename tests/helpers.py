@@ -10,9 +10,11 @@ from py_clickhouse_migrator.migrator import DEFAULT_MIGRATIONS_DIR, make_migrati
 MIGRATION_FILENAME_REGEX: re.Pattern[str] = re.compile(r"^\d{14}(?:_\w+)*\.sql$")
 
 TEST_MIGRATION_TEMPLATE: str = """-- migrator:up
+-- @stmt
 {up}
 
 -- migrator:down
+-- @stmt
 {rollback}
 """
 
