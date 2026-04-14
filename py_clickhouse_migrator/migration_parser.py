@@ -1,11 +1,17 @@
 from pathlib import Path
 from typing import Final
+from typing import NamedTuple
 
 from py_clickhouse_migrator.errors import MigrationParseError
 
 _UP_MARKER: Final[str] = "-- migrator:up"
 _DOWN_MARKER: Final[str] = "-- migrator:down"
 _STATEMENT_MARKER: Final[str] = "-- @stmt"
+
+
+class ParsedMigrationStatements(NamedTuple):
+    up: list[str]
+    down: list[str]
 
 
 def _trim_section(lines: list[str]) -> str:
@@ -86,7 +92,7 @@ def _parse_statement_blocks(lines: list[str], section_marker: str) -> list[str]:
     return statements
 
 
-def parse_migration_statements(filepath: str) -> tuple[list[str], list[str]]:
+def parse_migration_statements(filepath: str) -> ParsedMigrationStatements:
     lines = _read_migration_file(filepath).splitlines()
     up_index, down_index = _find_section_indexes(lines, filepath)
 
@@ -101,4 +107,4 @@ def parse_migration_statements(filepath: str) -> tuple[list[str], list[str]]:
             f"Migration {filepath} must contain at least one non-empty '{_STATEMENT_MARKER}' block in '{_UP_MARKER}'."
         )
 
-    return up_statements, rollback_statements
+    return ParsedMigrationStatements(up=up_statements, down=rollback_statements)
