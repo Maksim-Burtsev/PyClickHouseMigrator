@@ -4,7 +4,8 @@ import logging
 import os
 import re
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from functools import cached_property
 from typing import Final, NamedTuple
 
 import click
@@ -20,7 +21,12 @@ from py_clickhouse_migrator.errors import (
     MigrationDirectoryNotFoundError,
     MissingDatabaseUrlError,
 )
-from py_clickhouse_migrator.migration_parser import parse_migration_file
+from py_clickhouse_migrator.migration_parser import (
+    MigrationSections,
+    MigrationStatements,
+    extract_migration_statements,
+    load_migration_sections,
+)
 
 logger = logging.getLogger("py_clickhouse_migrator")
 
@@ -73,7 +79,22 @@ class Migration:
     name: str
     up: SQL
     rollback: SQL
-    checksum: str = field(default="")
+    checksum: str = ""
+
+    @cached_property
+    def _statements(self) -> MigrationStatements:
+        try:
+            return extract_migration_statements(MigrationSections(up=self.up, rollback=self.rollback))
+        except MigrationParseError as exc:
+            raise InvalidMigrationError(f"Migration {self.name}: {exc}") from exc
+
+    @property
+    def up_statements(self) -> list[SQL]:
+        return self._statements.up
+
+    @property
+    def rollback_statements(self) -> list[SQL]:
+        return self._statements.rollback
 
 
 def create_migrations_dir(migrations_dir: str = DEFAULT_MIGRATIONS_DIR) -> None:
@@ -231,7 +252,7 @@ class Migrator(object):
                 click.echo(click.style(f"-- {migration.name} (up)", fg="cyan", bold=True))
                 click.echo(migration.up.strip())
                 continue
-            self.apply_migration(query=migration.up)
+            self.apply_migration(migration.up_statements)
             self.save_applied_migration(
                 name=migration.name,
                 up=migration.up,
@@ -250,30 +271,16 @@ class Migrator(object):
                 click.echo(click.style(f"-- {migration.name} (rollback)", fg="yellow", bold=True))
                 click.echo(migration.rollback.strip())
                 continue
-            self.apply_migration(
-                query=migration.rollback,
-            )
-            self.delete_migration(
-                name=migration.name,
-            )
+            self.apply_migration(migration.rollback_statements)
+            self.delete_migration(name=migration.name)
             logger.info("%s rolled back [✔].", migration.name)
 
-    def apply_migration(self, query: SQL) -> None:
-        queries: list[SQL] = query.split(";")
+    def apply_migration(self, queries: list[SQL]) -> None:
         for query in queries:
-            query = query.strip("\n ")
-            if not query:
-                continue
             try:
                 self.ch_client.execute(query)
             except ServerException as exc:
                 raise InvalidMigrationError(f"Query {query} raise error: {exc}") from exc
-
-    def _parse_migration(self, filepath: str) -> tuple[str, str]:
-        try:
-            return parse_migration_file(filepath)
-        except MigrationParseError as exc:
-            raise InvalidMigrationError(str(exc)) from exc
 
     def get_migrations_for_apply(self, number: int | None = None) -> list[Migration]:
         filenames: list[str] = self.get_unapplied_migration_names()
@@ -284,16 +291,16 @@ class Migrator(object):
         result: list[Migration] = []
         for filename in filenames:
             filepath = f"{self.migrations_dir}/{filename}"
-            up, rollback = self._parse_migration(filepath)
-            if not up.strip():
-                logger.warning("Skip empty migration: %s", filename)
-                continue
+            try:
+                sections = load_migration_sections(filepath)
+            except MigrationParseError as exc:
+                raise InvalidMigrationError(str(exc)) from exc
             result.append(
                 Migration(
                     name=filename,
-                    up=up,
-                    rollback=rollback,
-                    checksum=compute_checksum(up, rollback),
+                    up=sections.up,
+                    rollback=sections.rollback,
+                    checksum=compute_checksum(sections.up, sections.rollback),
                 )
             )
 
@@ -346,10 +353,13 @@ class Migrator(object):
             if not os.path.exists(filepath):
                 mismatches.append(ChecksumMismatch(name, stored_checksum, ""))
                 continue
-            up, rollback = self._parse_migration(filepath)
+            try:
+                sections = load_migration_sections(filepath)
+            except MigrationParseError as exc:
+                raise InvalidMigrationError(str(exc)) from exc
             actual_checksum = compute_checksum(
-                up=up,
-                rollback=rollback,
+                up=sections.up,
+                rollback=sections.rollback,
             )
             if actual_checksum != stored_checksum:
                 mismatches.append(ChecksumMismatch(name, stored_checksum, actual_checksum))
