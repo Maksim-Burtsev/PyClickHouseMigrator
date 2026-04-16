@@ -5,6 +5,7 @@ import os
 import re
 import time
 from dataclasses import dataclass
+from enum import StrEnum
 from functools import cached_property
 from typing import Final, NamedTuple
 
@@ -17,6 +18,7 @@ from py_clickhouse_migrator.errors import (
     ClickHouseServerIsNotHealthyError,
     DatabaseNotFoundError,
     InvalidMigrationError,
+    InvalidStatementError,
     MigrationParseError,
     MigrationDirectoryNotFoundError,
     MissingDatabaseUrlError,
@@ -62,6 +64,11 @@ class ChecksumMismatch(NamedTuple):
 class ShowMigrationsResult(NamedTuple):
     output: str
     warning: str
+
+
+class MigrationDirection(StrEnum):
+    UP = "up"
+    ROLLBACK = "rollback"
 
 
 def normalize_content(content: str) -> str:
@@ -232,19 +239,22 @@ class Migrator(object):
             "Run 'py-clickhouse-migrator repair' to update checksums, or use --allow-dirty to skip this check."
         )
 
-    def up(self, n: int | None = None, dry_run: bool = False, allow_dirty: bool = False) -> None:
+    def up(self, n: int | None = None, dry_run: bool = False, allow_dirty: bool = False, validate: bool = True) -> None:
         """Apply pending migrations.
 
         Args:
             n: Maximum number of migrations to apply. All pending if None.
             dry_run: Print SQL without executing.
             allow_dirty: Skip checksum validation for modified files.
+            validate: Run preflight validation before apply or dry-run output.
 
         """
         self.check_integrity(allow_dirty=allow_dirty)
         migrations: list[Migration] = self.get_migrations_for_apply(n)
         if not migrations:
             logger.info("There are no migrations to apply.")
+        if validate:
+            self.validate_migrations(migrations, direction=MigrationDirection.UP)
         for i, migration in enumerate(migrations):
             if dry_run:
                 if i > 0:
@@ -261,9 +271,11 @@ class Migrator(object):
             )
             logger.info("%s applied [✔]", migration.name)
 
-    def rollback(self, number: int = 1, dry_run: bool = False) -> None:
+    def rollback(self, number: int = 1, dry_run: bool = False, validate: bool = True) -> None:
         """Rollback applied migrations in reverse order."""
         migrations: list[Migration] = self.get_migrations_for_rollback(number=number)
+        if validate:
+            self.validate_migrations(migrations, direction=MigrationDirection.ROLLBACK)
         for i, migration in enumerate(migrations):
             if dry_run:
                 if i > 0:
@@ -281,6 +293,23 @@ class Migrator(object):
                 self.ch_client.execute(query)
             except ServerException as exc:
                 raise InvalidMigrationError(f"Query {query} raise error: {exc}") from exc
+
+    def validate_statements(self, statements: list[SQL]) -> None:
+        for stmt in statements:
+            try:
+                self.ch_client.execute(f"EXPLAIN AST {stmt}", settings=self._settings)
+            except ServerException as exc:
+                raise InvalidStatementError(f"Query:\n{stmt[:500]}\n\nClickHouse error:\n{exc}") from exc
+
+    def validate_migrations(self, migrations: list[Migration], direction: MigrationDirection) -> None:
+        for migration in migrations:
+            statements = (
+                migration.up_statements if direction is MigrationDirection.UP else migration.rollback_statements
+            )
+            try:
+                self.validate_statements(statements=statements)
+            except InvalidStatementError as exc:
+                raise InvalidMigrationError(f"Validation failed for migration {migration.name}.\n\n{exc}") from exc
 
     def get_migrations_for_apply(self, number: int | None = None) -> list[Migration]:
         filenames: list[str] = self.get_unapplied_migration_names()

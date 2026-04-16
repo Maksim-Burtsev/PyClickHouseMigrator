@@ -69,6 +69,7 @@ def init(ctx: click.Context) -> None:
 @click.option("--lock-ttl", type=click.IntRange(min=1), default=600, help="Lock TTL in seconds.")
 @click.option("--lock-retry", type=click.IntRange(min=0), default=3, help="Number of lock acquire retries.")
 @click.option("--dry-run", is_flag=True, default=False, help="Show SQL without executing.")
+@click.option("--validate/--no-validate", default=True, help="Enable/disable preflight validation.")
 @click.option("--allow-dirty", is_flag=True, default=False, help="Skip checksum validation.")
 @click.pass_context
 def up(
@@ -78,6 +79,7 @@ def up(
     lock_ttl: int,
     lock_retry: int,
     dry_run: bool,
+    validate: bool,
     allow_dirty: bool,
 ) -> None:
     cluster = ctx.obj["cluster"]
@@ -90,7 +92,7 @@ def up(
         send_receive_timeout=ctx.obj["send_receive_timeout"],
     )
     if dry_run:
-        migrator.up(n=number, dry_run=True, allow_dirty=allow_dirty)
+        migrator.up(n=number, dry_run=True, allow_dirty=allow_dirty, validate=validate)
         return
     if lock:
         if not migrator.get_unapplied_migration_names():
@@ -99,9 +101,9 @@ def up(
         with MigrationLock(
             client=migrator.ch_client, db=migrator.get_db_name(), ttl=lock_ttl, retry_count=lock_retry, cluster=cluster
         ):
-            migrator.up(n=number, allow_dirty=allow_dirty)
+            migrator.up(n=number, allow_dirty=allow_dirty, validate=validate)
     else:
-        migrator.up(n=number, allow_dirty=allow_dirty)
+        migrator.up(n=number, allow_dirty=allow_dirty, validate=validate)
 
 
 @click.command()
@@ -115,8 +117,17 @@ def up(
 @click.option("--lock-ttl", type=click.IntRange(min=1), default=600, help="Lock TTL in seconds.")
 @click.option("--lock-retry", type=click.IntRange(min=0), default=3, help="Number of lock acquire retries.")
 @click.option("--dry-run", is_flag=True, default=False, help="Show SQL without executing.")
+@click.option("--validate/--no-validate", default=True, help="Enable/disable preflight validation.")
 @click.pass_context
-def rollback(ctx: click.Context, number: int, lock: bool, lock_ttl: int, lock_retry: int, dry_run: bool) -> None:
+def rollback(
+    ctx: click.Context,
+    number: int,
+    lock: bool,
+    lock_ttl: int,
+    lock_retry: int,
+    dry_run: bool,
+    validate: bool,
+) -> None:
     cluster = ctx.obj["cluster"]
     migrator = Migrator(
         database_url=ctx.obj["url"],
@@ -127,15 +138,15 @@ def rollback(ctx: click.Context, number: int, lock: bool, lock_ttl: int, lock_re
         send_receive_timeout=ctx.obj["send_receive_timeout"],
     )
     if dry_run:
-        migrator.rollback(number=number, dry_run=True)
+        migrator.rollback(number=number, dry_run=True, validate=validate)
         return
     if lock:
         with MigrationLock(
             client=migrator.ch_client, db=migrator.get_db_name(), ttl=lock_ttl, retry_count=lock_retry, cluster=cluster
         ):
-            migrator.rollback(number=number)
+            migrator.rollback(number=number, validate=validate)
     else:
-        migrator.rollback(number=number)
+        migrator.rollback(number=number, validate=validate)
 
 
 @click.command()
