@@ -18,7 +18,7 @@ TEST_MIGRATION_TEMPLATE: str = """-- migrator:up
 """
 
 
-def _render_migration_section(statements: str | Sequence[str]) -> str:
+def render_test_migration_section(statements: str | Sequence[str]) -> str:
     if isinstance(statements, str):
         return f"-- @stmt\n{statements}"
     return "\n\n".join(f"-- @stmt\n{statement}" for statement in statements)
@@ -26,8 +26,8 @@ def _render_migration_section(statements: str | Sequence[str]) -> str:
 
 def render_test_migration_content(up: str | Sequence[str], rollback: str | Sequence[str]) -> str:
     return TEST_MIGRATION_TEMPLATE.format(
-        up=_render_migration_section(up),
-        rollback=_render_migration_section(rollback),
+        up=render_test_migration_section(up),
+        rollback=render_test_migration_section(rollback),
     )
 
 

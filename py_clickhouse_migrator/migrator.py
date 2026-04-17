@@ -1,5 +1,4 @@
 import datetime as dt
-import hashlib
 import logging
 import os
 import re
@@ -13,6 +12,7 @@ import click
 from clickhouse_driver import Client
 from clickhouse_driver.errors import ServerException
 
+from py_clickhouse_migrator.checksum import compute_checksum_from_statements
 from py_clickhouse_migrator.errors import (
     ChecksumMismatchError,
     ClickHouseServerIsNotHealthyError,
@@ -71,22 +71,11 @@ class MigrationDirection(StrEnum):
     ROLLBACK = "rollback"
 
 
-def normalize_content(content: str) -> str:
-    lines = [line.rstrip() for line in content.splitlines() if line.strip()]
-    return "\n".join(lines)
-
-
-def compute_checksum(up: str, rollback: str) -> str:
-    combined = normalize_content(up) + "\0" + normalize_content(rollback)
-    return hashlib.sha256(combined.encode("utf-8")).hexdigest()
-
-
 @dataclass
 class Migration:
     name: str
     up: SQL
     rollback: SQL
-    checksum: str = ""
 
     @cached_property
     def _statements(self) -> MigrationStatements:
@@ -262,12 +251,16 @@ class Migrator(object):
                 click.echo(click.style(f"-- {migration.name} (up)", fg="cyan", bold=True))
                 click.echo(migration.up.strip())
                 continue
+            checksum = compute_checksum_from_statements(
+                migration.up_statements,
+                migration.rollback_statements,
+            )
             self.apply_migration(migration.up_statements)
             self.save_applied_migration(
                 name=migration.name,
                 up=migration.up,
                 rollback=migration.rollback,
-                checksum=migration.checksum,
+                checksum=checksum,
             )
             logger.info("%s applied [✔]", migration.name)
 
@@ -322,16 +315,15 @@ class Migrator(object):
             filepath = f"{self.migrations_dir}/{filename}"
             try:
                 sections = load_migration_sections(filepath)
-            except MigrationParseError as exc:
-                raise InvalidMigrationError(str(exc)) from exc
-            result.append(
-                Migration(
-                    name=filename,
-                    up=sections.up,
-                    rollback=sections.rollback,
-                    checksum=compute_checksum(sections.up, sections.rollback),
+                result.append(
+                    Migration(
+                        name=filename,
+                        up=sections.up,
+                        rollback=sections.rollback,
+                    )
                 )
-            )
+            except (MigrationParseError, InvalidMigrationError) as exc:
+                raise InvalidMigrationError(str(exc)) from exc
 
         return result
 
@@ -384,12 +376,17 @@ class Migrator(object):
                 continue
             try:
                 sections = load_migration_sections(filepath)
-            except MigrationParseError as exc:
+                migration = Migration(
+                    name=name,
+                    up=sections.up,
+                    rollback=sections.rollback,
+                )
+                actual_checksum = compute_checksum_from_statements(
+                    migration.up_statements,
+                    migration.rollback_statements,
+                )
+            except (MigrationParseError, InvalidMigrationError) as exc:
                 raise InvalidMigrationError(str(exc)) from exc
-            actual_checksum = compute_checksum(
-                up=sections.up,
-                rollback=sections.rollback,
-            )
             if actual_checksum != stored_checksum:
                 mismatches.append(ChecksumMismatch(name, stored_checksum, actual_checksum))
         return mismatches
