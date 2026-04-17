@@ -66,6 +66,34 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: uv sync --dev
 
+      - name: Wait for ClickHouse service
+        run: |
+          uv run python - <<'PY'
+          import time
+
+          from clickhouse_driver import Client
+
+          database_url = "clickhouse://default@localhost:19000/test"
+          last_error = None
+
+          for attempt in range(30):
+              client = None
+              try:
+                  client = Client.from_url(database_url)
+                  client.execute("SELECT 1")
+                  print("ClickHouse ready")
+                  break
+              except Exception as exc:
+                  last_error = exc
+                  print(f"Waiting for ClickHouse... ({attempt + 1}/30): {exc}")
+                  time.sleep(2)
+              finally:
+                  if client is not None:
+                      client.disconnect()
+          else:
+              raise SystemExit(f"ClickHouse service did not become ready: {last_error}")
+          PY
+
       - name: Run tests
         run: uv run pytest -v --cov=py_clickhouse_migrator --cov-report=xml
 
