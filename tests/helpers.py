@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+from collections.abc import Sequence
 
 from clickhouse_driver import Client
 
@@ -15,6 +16,19 @@ TEST_MIGRATION_TEMPLATE: str = """-- migrator:up
 -- migrator:down
 {rollback}
 """
+
+
+def render_test_migration_section(statements: str | Sequence[str]) -> str:
+    if isinstance(statements, str):
+        return f"-- @stmt\n{statements}"
+    return "\n\n".join(f"-- @stmt\n{statement}" for statement in statements)
+
+
+def render_test_migration_content(up: str | Sequence[str], rollback: str | Sequence[str]) -> str:
+    return TEST_MIGRATION_TEMPLATE.format(
+        up=render_test_migration_section(up),
+        rollback=render_test_migration_section(rollback),
+    )
 
 
 def table_exists(ch_client: Client, table_name: str) -> bool:
@@ -35,12 +49,12 @@ def get_engine(ch_client: Client, table_name: str) -> str:
 
 def create_test_migration(
     name: str,
-    up: str,
-    rollback: str,
+    up: str | Sequence[str],
+    rollback: str | Sequence[str],
     migrations_dir: str = DEFAULT_MIGRATIONS_DIR,
 ) -> str:
     filename = make_migration_filename(name)
     filepath = os.path.join(migrations_dir, filename)
     with open(filepath, "w", encoding="utf-8") as f:
-        f.write(TEST_MIGRATION_TEMPLATE.format(up=up, rollback=rollback))
+        f.write(render_test_migration_content(up, rollback))
     return filename

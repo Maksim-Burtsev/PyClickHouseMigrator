@@ -95,6 +95,8 @@ def test_cli_new(runner: CliRunner, tmp_path: pytest.TempPathFactory) -> None:
     files = os.listdir(path)
     assert len(files) == 1
     assert files[0].endswith("_add_users.sql")
+    content = (tmp_path / "migrations" / files[0]).read_text(encoding="utf-8")
+    assert content.count("-- @stmt") == 2
 
 
 def test_cli_new_without_name(runner: CliRunner, tmp_path: pytest.TempPathFactory) -> None:
@@ -105,6 +107,8 @@ def test_cli_new_without_name(runner: CliRunner, tmp_path: pytest.TempPathFactor
     files = os.listdir(path)
     assert len(files) == 1
     assert files[0].endswith(".sql")
+    content = (tmp_path / "migrations" / files[0]).read_text(encoding="utf-8")
+    assert content.count("-- @stmt") == 2
 
 
 def test_cli_new_default_path(runner: CliRunner) -> None:
@@ -132,13 +136,13 @@ def test_up_dry_run_output_visible_with_quiet(runner: CliRunner) -> None:
             name="001_create_users.sql",
             up="CREATE TABLE users (id Int32) ENGINE MergeTree() ORDER BY id",
             rollback="DROP TABLE users",
-            checksum="abc123",
         ),
     ]
     with (
         patch.object(Migrator, "__init__", return_value=None),
         patch.object(Migrator, "check_integrity"),
         patch.object(Migrator, "get_migrations_for_apply", return_value=migrations),
+        patch.object(Migrator, "validate_migrations"),
     ):
         result = runner.invoke(main, ["--url", FAKE_URL, "--quiet", "up", "--dry-run"])
 
@@ -150,13 +154,19 @@ def test_up_dry_run_output_visible_with_quiet(runner: CliRunner) -> None:
 def test_cli_up_dry_run(runner: CliRunner, mock_migrator: MagicMock) -> None:
     result = runner.invoke(main, ["--url", FAKE_URL, "up", "--dry-run"])
     assert result.exit_code == 0
-    mock_migrator.up.assert_called_once_with(n=None, dry_run=True, allow_dirty=False)
+    mock_migrator.up.assert_called_once_with(n=None, dry_run=True, allow_dirty=False, validate=True)
 
 
 def test_cli_up_dry_run_allow_dirty(runner: CliRunner, mock_migrator: MagicMock) -> None:
     result = runner.invoke(main, ["--url", FAKE_URL, "up", "--dry-run", "--allow-dirty"])
     assert result.exit_code == 0
-    mock_migrator.up.assert_called_once_with(n=None, dry_run=True, allow_dirty=True)
+    mock_migrator.up.assert_called_once_with(n=None, dry_run=True, allow_dirty=True, validate=True)
+
+
+def test_cli_up_dry_run_no_validate(runner: CliRunner, mock_migrator: MagicMock) -> None:
+    result = runner.invoke(main, ["--url", FAKE_URL, "up", "--dry-run", "--no-validate"])
+    assert result.exit_code == 0
+    mock_migrator.up.assert_called_once_with(n=None, dry_run=True, allow_dirty=False, validate=False)
 
 
 def test_cli_up_no_lock(runner: CliRunner, mock_migrator: MagicMock) -> None:
@@ -164,7 +174,7 @@ def test_cli_up_no_lock(runner: CliRunner, mock_migrator: MagicMock) -> None:
         result = runner.invoke(main, ["--url", FAKE_URL, "up", "--no-lock"])
     assert result.exit_code == 0
     mock_lock_cls.assert_not_called()
-    mock_migrator.up.assert_called_once_with(n=None, allow_dirty=False)
+    mock_migrator.up.assert_called_once_with(n=None, allow_dirty=False, validate=True)
 
 
 def test_cli_up_with_lock_and_pending(runner: CliRunner, mock_migrator: MagicMock) -> None:
@@ -183,7 +193,7 @@ def test_cli_up_with_lock_and_pending(runner: CliRunner, mock_migrator: MagicMoc
     assert result.exit_code == 0
     mock_lock_cls.assert_called_once()
     mock_lock_instance.__enter__.assert_called_once()
-    mock_migrator.up.assert_called_once_with(n=None, allow_dirty=False)
+    mock_migrator.up.assert_called_once_with(n=None, allow_dirty=False, validate=True)
 
 
 def test_cli_up_no_pending_skips_lock(runner: CliRunner, mock_migrator: MagicMock) -> None:
@@ -198,7 +208,7 @@ def test_cli_up_no_pending_skips_lock(runner: CliRunner, mock_migrator: MagicMoc
 def test_cli_up_with_number(runner: CliRunner, mock_migrator: MagicMock) -> None:
     result = runner.invoke(main, ["--url", FAKE_URL, "up", "--no-lock", "3"])
     assert result.exit_code == 0
-    mock_migrator.up.assert_called_once_with(n=3, allow_dirty=False)
+    mock_migrator.up.assert_called_once_with(n=3, allow_dirty=False, validate=True)
 
 
 # --- rollback ---
@@ -215,6 +225,7 @@ def test_rollback_dry_run_output_visible_with_quiet(runner: CliRunner) -> None:
     with (
         patch.object(Migrator, "__init__", return_value=None),
         patch.object(Migrator, "get_migrations_for_rollback", return_value=migrations),
+        patch.object(Migrator, "validate_migrations"),
     ):
         result = runner.invoke(main, ["--url", FAKE_URL, "--quiet", "rollback", "--dry-run"])
 
@@ -226,7 +237,7 @@ def test_rollback_dry_run_output_visible_with_quiet(runner: CliRunner) -> None:
 def test_cli_rollback_dry_run(runner: CliRunner, mock_migrator: MagicMock) -> None:
     result = runner.invoke(main, ["--url", FAKE_URL, "rollback", "--dry-run"])
     assert result.exit_code == 0
-    mock_migrator.rollback.assert_called_once_with(number=1, dry_run=True)
+    mock_migrator.rollback.assert_called_once_with(number=1, dry_run=True, validate=True)
 
 
 def test_cli_rollback_no_lock(runner: CliRunner, mock_migrator: MagicMock) -> None:
@@ -234,7 +245,7 @@ def test_cli_rollback_no_lock(runner: CliRunner, mock_migrator: MagicMock) -> No
         result = runner.invoke(main, ["--url", FAKE_URL, "rollback", "--no-lock"])
     assert result.exit_code == 0
     mock_lock_cls.assert_not_called()
-    mock_migrator.rollback.assert_called_once_with(number=1)
+    mock_migrator.rollback.assert_called_once_with(number=1, validate=True)
 
 
 def test_cli_rollback_with_lock(runner: CliRunner, mock_migrator: MagicMock) -> None:
@@ -252,13 +263,19 @@ def test_cli_rollback_with_lock(runner: CliRunner, mock_migrator: MagicMock) -> 
     assert result.exit_code == 0
     mock_lock_cls.assert_called_once()
     mock_lock_instance.__enter__.assert_called_once()
-    mock_migrator.rollback.assert_called_once_with(number=1)
+    mock_migrator.rollback.assert_called_once_with(number=1, validate=True)
 
 
 def test_cli_rollback_with_number(runner: CliRunner, mock_migrator: MagicMock) -> None:
     result = runner.invoke(main, ["--url", FAKE_URL, "rollback", "--no-lock", "5"])
     assert result.exit_code == 0
-    mock_migrator.rollback.assert_called_once_with(number=5)
+    mock_migrator.rollback.assert_called_once_with(number=5, validate=True)
+
+
+def test_cli_rollback_no_validate(runner: CliRunner, mock_migrator: MagicMock) -> None:
+    result = runner.invoke(main, ["--url", FAKE_URL, "rollback", "--no-lock", "--no-validate"])
+    assert result.exit_code == 0
+    mock_migrator.rollback.assert_called_once_with(number=1, validate=False)
 
 
 # --- show ---

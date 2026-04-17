@@ -123,3 +123,4 @@ def test_new_sql_migration_template_contains_markers(tmp_path: pytest.TempPathFa
     assert filepath.endswith(".sql")
     assert "-- migrator:up" in content
     assert "-- migrator:down" in content
+    assert content.count("-- @stmt") == 2

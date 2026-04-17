@@ -1,3 +1,4 @@
+from .checksum import compute_checksum, normalize_content
 from .errors import (
     ChecksumMismatchError,
     ClickHouseServerIsNotHealthyError,
@@ -11,11 +12,9 @@ from .migrator import (
     ChecksumMismatch,
     Migrator,
     ShowMigrationsResult,
-    compute_checksum,
     create_migration_file,
     create_migrations_dir,
     make_migration_filename,
-    normalize_content,
 )
 
 __all__ = [

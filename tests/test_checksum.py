@@ -7,16 +7,15 @@ import pytest
 from click.testing import CliRunner
 from clickhouse_driver import Client
 
+from py_clickhouse_migrator.checksum import compute_checksum, normalize_content
 from py_clickhouse_migrator.errors import ChecksumMismatchError
 from py_clickhouse_migrator.migrator import (
     DEFAULT_MIGRATIONS_DIR,
     Migrator,
-    compute_checksum,
-    normalize_content,
 )
 
 from py_clickhouse_migrator.cli import main
-from tests.helpers import TEST_MIGRATION_TEMPLATE, create_test_migration
+from tests.helpers import create_test_migration, render_test_migration_content, render_test_migration_section
 
 
 # --- normalize_content & compute_checksum ---
@@ -57,39 +56,47 @@ def test_normalize_filters_blank_lines_with_spaces() -> None:
 
 
 def test_checksum_deterministic() -> None:
-    up = "SELECT 1;\nSELECT 2;"
-    rb = "SELECT 1;"
+    up = render_test_migration_section(["SELECT 1;", "SELECT 2;"])
+    rb = render_test_migration_section("SELECT 1;")
     assert compute_checksum(up, rb) == compute_checksum(up, rb)
 
 
 def test_checksum_ignores_whitespace_changes() -> None:
-    up_1 = "SELECT 1;   \r\nSELECT 2;\t\n"
-    up_2 = "SELECT 1;\nSELECT 2;\n"
-    rb = "SELECT 1;"
+    up_1 = render_test_migration_section("SELECT 1;   \r\nSELECT 2;\t\n")
+    up_2 = render_test_migration_section("SELECT 1;\nSELECT 2;\n")
+    rb = render_test_migration_section("SELECT 1;")
     assert compute_checksum(up_1, rb) == compute_checksum(up_2, rb)
 
 
 def test_checksum_detects_content_changes() -> None:
-    rb = "SELECT 1;"
-    assert compute_checksum("SELECT 1;", rb) != compute_checksum("SELECT 2;", rb)
+    rb = render_test_migration_section("SELECT 1;")
+    assert compute_checksum(render_test_migration_section("SELECT 1;"), rb) != compute_checksum(
+        render_test_migration_section("SELECT 2;"), rb
+    )
 
 
 def test_checksum_stable_across_blank_lines() -> None:
-    up_1 = "SELECT 1;\n\nSELECT 2;"
-    up_2 = "SELECT 1;\nSELECT 2;"
-    rb = "SELECT 1;"
+    up_1 = render_test_migration_section("SELECT 1;\n\nSELECT 2;")
+    up_2 = render_test_migration_section("SELECT 1;\nSELECT 2;")
+    rb = render_test_migration_section("SELECT 1;")
     assert compute_checksum(up_1, rb) == compute_checksum(up_2, rb)
 
 
 def test_checksum_uses_both_up_and_rollback() -> None:
-    up = "CREATE TABLE t (id Int32) ENGINE = MergeTree ORDER BY id"
-    rb_1 = "DROP TABLE t"
-    rb_2 = "DROP TABLE IF EXISTS t"
+    up = render_test_migration_section("CREATE TABLE t (id Int32) ENGINE = MergeTree ORDER BY id")
+    rb_1 = render_test_migration_section("DROP TABLE t")
+    rb_2 = render_test_migration_section("DROP TABLE IF EXISTS t")
     assert compute_checksum(up, rb_1) != compute_checksum(up, rb_2)
 
 
 def test_checksum_no_collision_on_concatenation() -> None:
-    assert compute_checksum("SELECT 1;", "SELECT 2; SELECT 3;") != compute_checksum("SELECT 1; SELECT 2;", "SELECT 3;")
+    assert compute_checksum(
+        render_test_migration_section("SELECT 1;"),
+        render_test_migration_section(["SELECT 2;", "SELECT 3;"]),
+    ) != compute_checksum(
+        render_test_migration_section(["SELECT 1;", "SELECT 2;"]),
+        render_test_migration_section("SELECT 3;"),
+    )
 
 
 # --- checksum save ---
@@ -128,7 +135,7 @@ def test_up_fails_on_checksum_mismatch(migrator: Migrator, migrator_init: None, 
     filepath = f"{DEFAULT_MIGRATIONS_DIR}/{filename}"
     with open(filepath, "w") as f:
         f.write(
-            TEST_MIGRATION_TEMPLATE.format(
+            render_test_migration_content(
                 up="CREATE TABLE IF NOT EXISTS test_mismatch (id Int32, name String) Engine=MergeTree() ORDER BY id;",
                 rollback="DROP TABLE IF EXISTS test_mismatch",
             )
@@ -154,7 +161,7 @@ def test_up_allow_dirty_skips_validation(migrator: Migrator, migrator_init: None
     filepath = f"{DEFAULT_MIGRATIONS_DIR}/{filename}"
     with open(filepath, "w") as f:
         f.write(
-            TEST_MIGRATION_TEMPLATE.format(
+            render_test_migration_content(
                 up="CREATE TABLE IF NOT EXISTS test_dirty (id Int32, name String) Engine=MergeTree() ORDER BY id;",
                 rollback="DROP TABLE IF EXISTS test_dirty",
             )
@@ -239,7 +246,7 @@ def test_repair_updates_checksum(migrator: Migrator, migrator_init: None, ch_cli
     filepath = f"{DEFAULT_MIGRATIONS_DIR}/{filename}"
     with open(filepath, "w") as f:
         f.write(
-            TEST_MIGRATION_TEMPLATE.format(
+            render_test_migration_content(
                 up="CREATE TABLE IF NOT EXISTS test_repair (id Int32, v String) Engine=MergeTree() ORDER BY id;",
                 rollback="DROP TABLE IF EXISTS test_repair",
             )
@@ -327,7 +334,7 @@ def test_show_modified_suffix_and_warning(migrator: Migrator, migrator_init: Non
     filepath = f"{DEFAULT_MIGRATIONS_DIR}/{filename}"
     with open(filepath, "w") as f:
         f.write(
-            TEST_MIGRATION_TEMPLATE.format(
+            render_test_migration_content(
                 up="CREATE TABLE IF NOT EXISTS test_show_mod (id Int32, v String) Engine=MergeTree() ORDER BY id;",
                 rollback="DROP TABLE IF EXISTS test_show_mod",
             )
@@ -403,7 +410,7 @@ def test_show_truncated_list_still_warns(migrator: Migrator, migrator_init: None
     filepath = f"{DEFAULT_MIGRATIONS_DIR}/{oldest}"
     with open(filepath, "w") as f:
         f.write(
-            TEST_MIGRATION_TEMPLATE.format(
+            render_test_migration_content(
                 up="CREATE TABLE IF NOT EXISTS modified_table (id Int32) Engine=MergeTree() ORDER BY id;",
                 rollback="DROP TABLE IF EXISTS modified_table",
             )
@@ -440,7 +447,7 @@ def test_show_warning_plural(migrator: Migrator, migrator_init: None, ch_client:
     filepath1 = f"{DEFAULT_MIGRATIONS_DIR}/{filename1}"
     with open(filepath1, "w") as f:
         f.write(
-            TEST_MIGRATION_TEMPLATE.format(
+            render_test_migration_content(
                 up="CREATE TABLE IF NOT EXISTS test_plural_1 (id Int32, v String) Engine=MergeTree() ORDER BY id;",
                 rollback="DROP TABLE IF EXISTS test_plural_1",
             )
@@ -473,7 +480,7 @@ def test_show_warning_stderr(migrator: Migrator, migrator_init: None, ch_client:
     filepath = f"{DEFAULT_MIGRATIONS_DIR}/{filename}"
     with open(filepath, "w") as f:
         f.write(
-            TEST_MIGRATION_TEMPLATE.format(
+            render_test_migration_content(
                 up="CREATE TABLE IF NOT EXISTS test_stderr (id Int32, v String) Engine=MergeTree() ORDER BY id;",
                 rollback="DROP TABLE IF EXISTS test_stderr",
             )
@@ -500,7 +507,7 @@ def test_show_head_modified_combo_color(migrator: Migrator, migrator_init: None,
     filepath = f"{DEFAULT_MIGRATIONS_DIR}/{filename}"
     with open(filepath, "w") as f:
         f.write(
-            TEST_MIGRATION_TEMPLATE.format(
+            render_test_migration_content(
                 up="CREATE TABLE IF NOT EXISTS test_combo (id Int32, v String) Engine=MergeTree() ORDER BY id;",
                 rollback="DROP TABLE IF EXISTS test_combo",
             )
