@@ -136,7 +136,6 @@ def test_up_dry_run_output_visible_with_quiet(runner: CliRunner) -> None:
             name="001_create_users.sql",
             up="CREATE TABLE users (id Int32) ENGINE MergeTree() ORDER BY id",
             rollback="DROP TABLE users",
-            checksum="abc123",
         ),
     ]
     with (
