@@ -14,6 +14,7 @@ from clickhouse_driver.errors import ServerException
 
 from py_clickhouse_migrator.checksum import compute_checksum_from_statements
 from py_clickhouse_migrator.errors import (
+    BaselineError,
     ChecksumMismatchError,
     ClickHouseServerIsNotHealthyError,
     DatabaseNotFoundError,
@@ -71,11 +72,17 @@ class MigrationDirection(StrEnum):
     ROLLBACK = "rollback"
 
 
+class MigrationKind(StrEnum):
+    MIGRATION = "migration"
+    BASELINE = "baseline"
+
+
 @dataclass
 class Migration:
     name: str
     up: SQL
     rollback: SQL
+    kind: str = MigrationKind.MIGRATION.value
 
     @cached_property
     def _statements(self) -> MigrationStatements:
@@ -91,6 +98,10 @@ class Migration:
     @property
     def rollback_statements(self) -> list[SQL]:
         return self._statements.rollback
+
+    @property
+    def is_baseline(self) -> bool:
+        return self.kind == MigrationKind.BASELINE.value
 
 
 def create_migrations_dir(migrations_dir: str = DEFAULT_MIGRATIONS_DIR) -> None:
@@ -173,6 +184,7 @@ class Migrator(object):
         migrator_table: SQL = f"""
         CREATE TABLE IF NOT EXISTS db_migrations {on_cluster} (
             name String,
+            kind Enum8('migration' = 1, 'baseline' = 2) DEFAULT '{MigrationKind.MIGRATION.value}',
             up String,
             rollback String,
             dt DateTime64 DEFAULT now(),
@@ -327,6 +339,18 @@ class Migrator(object):
 
         return result
 
+    def baseline(self) -> None:
+        if self.get_applied_migrations_names():
+            raise BaselineError("Baseline requires an empty db_migrations ledger.")
+        filenames = sorted(file for file in os.listdir(self.migrations_dir) if file.endswith(".sql"))
+        if not filenames:
+            logger.info("No SQL migration files found to baseline.")
+            return
+
+        self.save_baselined_migrations(filenames)
+        for name in filenames:
+            logger.info("%s baselined [✔]", name)
+
     def get_unapplied_migration_names(self) -> list[str]:
         filenames: list[str] = [file for file in os.listdir(self.migrations_dir) if file.endswith(".sql")]
         applied_migrations: list[str] = self.get_applied_migrations_names()
@@ -340,17 +364,35 @@ class Migrator(object):
 
     def get_migrations_for_rollback(self, number: int = 1) -> list[Migration]:
         return [
-            Migration(name=row[0], up=row[1], rollback=row[2])
+            Migration(name=row[0], up=row[1], rollback=row[2], kind=row[3])
             for row in self.ch_client.execute(
-                f"SELECT name, up, rollback FROM db_migrations ORDER BY dt DESC LIMIT {number}",
+                f"""
+                SELECT name, up, rollback, kind
+                FROM db_migrations
+                WHERE kind = '{MigrationKind.MIGRATION.value}'
+                ORDER BY dt DESC
+                LIMIT {number}
+                """,
                 settings=self._settings,
             )
         ]
 
     def save_applied_migration(self, name: str, up: SQL, rollback: SQL, checksum: str = "") -> None:
         self.ch_client.execute(
-            "INSERT INTO db_migrations (name, up, rollback, checksum) VALUES",
-            [[name, up, rollback, checksum]],
+            "INSERT INTO db_migrations (name, kind, up, rollback, checksum) VALUES",
+            [[name, MigrationKind.MIGRATION.value, up, rollback, checksum]],
+            settings=self._settings,
+        )
+
+    def save_baselined_migrations(self, names: list[str]) -> None:
+        base_dt = dt.datetime.now(dt.UTC).replace(tzinfo=None)
+        rows = [
+            [name, MigrationKind.BASELINE.value, "", "", base_dt + dt.timedelta(milliseconds=index), ""]
+            for index, name in enumerate(names)
+        ]
+        self.ch_client.execute(
+            "INSERT INTO db_migrations (name, kind, up, rollback, dt, checksum) VALUES",
+            rows,
             settings=self._settings,
         )
 
@@ -364,7 +406,14 @@ class Migrator(object):
 
     def validate_checksums(self) -> list[ChecksumMismatch]:
         rows: list[tuple[str, str]] = self.ch_client.execute(
-            "SELECT name, checksum FROM db_migrations ORDER BY dt", settings=self._settings
+            """
+            SELECT name, checksum
+            FROM db_migrations
+            WHERE kind = %(kind)s
+            ORDER BY dt
+            """,
+            {"kind": MigrationKind.MIGRATION.value},
+            settings=self._settings,
         )
         mismatches: list[ChecksumMismatch] = []
         for name, stored_checksum in rows:
@@ -417,6 +466,14 @@ class Migrator(object):
         unapplied_names = self.get_unapplied_migration_names()
         total_applied = len(applied_names)
         total_pending = len(unapplied_names)
+        baseline_names = {
+            row[0]
+            for row in self.ch_client.execute(
+                "SELECT name FROM db_migrations WHERE kind = %(kind)s ORDER BY dt",
+                {"kind": MigrationKind.BASELINE.value},
+                settings=self._settings,
+            )
+        }
 
         mismatch_map: dict[str, str] = {}
         for name, _, actual in self.validate_checksums():
@@ -431,6 +488,8 @@ class Migrator(object):
                 suffixes: list[str] = []
                 if i == 0:
                     suffixes.append("HEAD")
+                if name in baseline_names:
+                    suffixes.append("baseline")
                 status = mismatch_map.get(name, "")
                 if status:
                     suffixes.append(status)

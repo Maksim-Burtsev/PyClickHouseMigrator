@@ -40,6 +40,7 @@ def test_db_migrations_table_creation(ch_client: Client, test_db: str) -> None:
         "CREATE TABLE test.db_migrations\n"
         "(\n"
         "    `name` String,\n"
+        "    `kind` Enum8('migration' = 1, 'baseline' = 2) DEFAULT 'migration',\n"
         "    `up` String,\n"
         "    `rollback` String,\n"
         "    `dt` DateTime64(3) DEFAULT now(),\n"
