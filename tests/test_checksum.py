@@ -230,6 +230,19 @@ def test_validate_passes_when_no_changes(migrator: Migrator, migrator_init: None
     ch_client.execute("DROP TABLE IF EXISTS test_ok")
 
 
+def test_validate_ignores_baselined_missing_file(migrator: Migrator, migrator_init: None) -> None:
+    filename = create_test_migration(
+        name="baseline_missing",
+        up="CREATE TABLE IF NOT EXISTS baseline_missing (id Int32) Engine=MergeTree() ORDER BY id;",
+        rollback="DROP TABLE IF EXISTS baseline_missing",
+    )
+    migrator.baseline()
+
+    os.remove(f"{DEFAULT_MIGRATIONS_DIR}/{filename}")
+
+    assert migrator.validate_checksums() == []
+
+
 # --- repair ---
 
 
@@ -279,6 +292,26 @@ def test_repair_nothing_to_fix(migrator: Migrator, migrator_init: None, ch_clien
     ch_client.execute("DROP TABLE IF EXISTS test_repair_ok")
 
 
+def test_repair_ignores_baselined_rows(migrator: Migrator, migrator_init: None, ch_client: Client) -> None:
+    filename = create_test_migration(
+        name="baseline_repair",
+        up="CREATE TABLE IF NOT EXISTS baseline_repair (id Int32) Engine=MergeTree() ORDER BY id;",
+        rollback="DROP TABLE IF EXISTS baseline_repair",
+    )
+    migrator.baseline()
+
+    with open(f"{DEFAULT_MIGRATIONS_DIR}/{filename}", "w", encoding="utf-8") as f:
+        f.write(
+            render_test_migration_content(
+                up="CREATE TABLE IF NOT EXISTS baseline_repair (id Int32, v String) Engine=MergeTree() ORDER BY id;",
+                rollback="DROP TABLE IF EXISTS baseline_repair",
+            )
+        )
+
+    assert migrator.repair() == []
+    assert ch_client.execute("SELECT checksum FROM db_migrations WHERE name = %(name)s", {"name": filename}) == [("",)]
+
+
 def test_repair_skips_missing_files(migrator: Migrator, migrator_init: None, ch_client: Client) -> None:
     """repair() should skip missing files and only log a warning."""
     filename = create_test_migration(
@@ -319,6 +352,23 @@ def test_show_clean_output(migrator: Migrator, migrator_init: None, ch_client: C
 
     # clean
     ch_client.execute("DROP TABLE IF EXISTS test_clean")
+
+
+def test_show_baseline_suffix_without_warning_for_missing_file(migrator: Migrator, migrator_init: None) -> None:
+    filename = create_test_migration(
+        name="baseline_show",
+        up="CREATE TABLE IF NOT EXISTS baseline_show (id Int32) Engine=MergeTree() ORDER BY id;",
+        rollback="DROP TABLE IF EXISTS baseline_show",
+    )
+    migrator.baseline()
+
+    os.remove(f"{DEFAULT_MIGRATIONS_DIR}/{filename}")
+
+    output, warning = migrator.show_migrations()
+    plain = click.unstyle(output)
+
+    assert f"{filename} (HEAD, baseline)" in plain
+    assert warning == ""
 
 
 def test_show_modified_suffix_and_warning(migrator: Migrator, migrator_init: None, ch_client: Client) -> None:

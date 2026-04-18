@@ -12,6 +12,7 @@ from click.testing import CliRunner
 
 from py_clickhouse_migrator.cli import main
 from py_clickhouse_migrator.errors import (
+    BaselineError,
     ChecksumMismatchError,
     ClickHouseServerIsNotHealthyError,
     DatabaseNotFoundError,
@@ -302,6 +303,47 @@ def test_cli_show_warning_to_stderr(runner: CliRunner, mock_migrator: MagicMock)
     assert result.exit_code == 0
     assert "output" in result.output
     assert "WARNING: 1 issue" in result.stderr
+
+
+# --- baseline ---
+
+
+def test_cli_baseline_no_lock(runner: CliRunner, mock_migrator: MagicMock) -> None:
+    with patch("py_clickhouse_migrator.cli.MigrationLock") as mock_lock_cls:
+        result = runner.invoke(main, ["--url", FAKE_URL, "baseline", "--no-lock"])
+
+    assert result.exit_code == 0
+    mock_lock_cls.assert_not_called()
+    mock_migrator.baseline.assert_called_once_with()
+
+
+def test_cli_baseline_with_lock(runner: CliRunner, mock_migrator: MagicMock) -> None:
+    mock_migrator.get_db_name.return_value = "test"
+    mock_migrator.ch_client = MagicMock()
+
+    with patch("py_clickhouse_migrator.cli.MigrationLock") as mock_lock_cls:
+        mock_lock_instance = MagicMock()
+        mock_lock_cls.return_value = mock_lock_instance
+        mock_lock_instance.__enter__ = MagicMock(return_value=mock_lock_instance)
+        mock_lock_instance.__exit__ = MagicMock(return_value=False)
+
+        result = runner.invoke(main, ["--url", FAKE_URL, "baseline"])
+
+    assert result.exit_code == 0
+    mock_lock_cls.assert_called_once()
+    mock_lock_instance.__enter__.assert_called_once()
+    mock_migrator.baseline.assert_called_once_with()
+
+
+def test_cli_baseline_handled_exception_clean_output(runner: CliRunner) -> None:
+    with patch("py_clickhouse_migrator.cli.Migrator") as mock_cls:
+        mock_cls.return_value.baseline.side_effect = BaselineError("Baseline requires an empty db_migrations ledger.")
+        result = runner.invoke(main, ["--url", FAKE_URL, "baseline", "--no-lock"])
+
+    assert result.exit_code == 1
+    assert "Error: " in result.stderr
+    assert "Baseline requires an empty db_migrations ledger." in result.stderr
+    assert "Traceback" not in result.output
 
 
 # --- repair ---
