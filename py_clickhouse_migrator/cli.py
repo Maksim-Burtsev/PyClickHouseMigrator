@@ -6,6 +6,7 @@ import typing as t
 import click
 from py_clickhouse_migrator import Migrator
 from py_clickhouse_migrator.errors import (
+    BaselineError,
     ChecksumMismatchError,
     ClickHouseServerIsNotHealthyError,
     DatabaseNotFoundError,
@@ -24,6 +25,7 @@ logger = logging.getLogger("py_clickhouse_migrator")
 
 
 _HANDLED_EXCEPTIONS: Final[tuple[type[Exception], ...]] = (
+    BaselineError,
     LockError,
     ChecksumMismatchError,
     InvalidMigrationError,
@@ -164,6 +166,45 @@ def show(ctx: click.Context, show_all: bool) -> None:
     click.echo(output)
     if warning:
         click.echo(f"\n{warning}", err=True)
+
+
+@click.command()
+@click.option("--lock/--no-lock", default=True, help="Enable/disable migration lock.")
+@click.option("--lock-ttl", type=click.IntRange(min=1), default=600, help="Lock TTL in seconds.")
+@click.option("--lock-retry", type=click.IntRange(min=0), default=3, help="Number of lock acquire retries.")
+@click.pass_context
+def baseline(
+    ctx: click.Context,
+    lock: bool,
+    lock_ttl: int,
+    lock_retry: int,
+) -> None:
+    cluster = ctx.obj["cluster"]
+    migrator = Migrator(
+        database_url=ctx.obj["url"],
+        migrations_dir=ctx.obj["path"],
+        cluster=cluster,
+        connect_retries=ctx.obj["connect_retries"],
+        connect_retries_interval=ctx.obj["connect_retries_interval"],
+        send_receive_timeout=ctx.obj["send_receive_timeout"],
+    )
+    if lock:
+        with MigrationLock(
+            client=migrator.ch_client, db=migrator.get_db_name(), ttl=lock_ttl, retry_count=lock_retry, cluster=cluster
+        ):
+            migration_names = migrator.baseline()
+    else:
+        migration_names = migrator.baseline()
+
+    if not migration_names:
+        click.echo(click.style("No SQL migration files found to baseline.", fg="yellow"))
+        return
+
+    migration_count = len(migration_names)
+    summary = f"Baselined {migration_count} migration(s)."
+    click.echo(click.style(summary, fg="green", bold=True))
+    for name in migration_names:
+        click.echo(f"  {click.style('[B]', fg='cyan')} {name}")
 
 
 @click.command()
@@ -339,6 +380,7 @@ main.add_command(new)
 main.add_command(up)
 main.add_command(rollback)
 main.add_command(show)
+main.add_command(baseline)
 main.add_command(repair)
 main.add_command(force_unlock)
 main.add_command(lock_info)

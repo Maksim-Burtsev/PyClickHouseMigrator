@@ -92,6 +92,24 @@ def test_migration_applied_on_node1_visible_on_node2(cluster_migrator: Migrator,
     assert filename in names
 
 
+def test_baseline_on_node1_visible_on_node2(cluster_migrator: Migrator, node2: Client) -> None:
+    filename = create_test_migration(
+        name="cluster_baseline",
+        up="SELECT 1",
+        rollback="SELECT 1",
+    )
+    cluster_migrator.baseline()
+
+    rows = node2.execute(
+        "SELECT name, toString(kind) FROM db_migrations ORDER BY dt",
+        settings={"select_sequential_consistency": 1},
+    )
+    assert rows == [(filename, "baseline")]
+
+    m2 = Migrator(database_url=NODE_2_URL, cluster=CLUSTER_NAME)
+    assert m2.get_unapplied_migration_names() == []
+
+
 def test_migration_creates_table_on_both_nodes(cluster_migrator: Migrator, node1: Client, node2: Client) -> None:
     """Migration with ON CLUSTER DDL creates user table visible on both nodes."""
     create_test_migration(

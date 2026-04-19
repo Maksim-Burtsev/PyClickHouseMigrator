@@ -10,6 +10,7 @@ import pytest
 from clickhouse_driver import Client
 
 from py_clickhouse_migrator.errors import (
+    BaselineError,
     ClickHouseServerIsNotHealthyError,
     DatabaseNotFoundError,
     InvalidMigrationError,
@@ -40,6 +41,7 @@ def test_db_migrations_table_creation(ch_client: Client, test_db: str) -> None:
         "CREATE TABLE test.db_migrations\n"
         "(\n"
         "    `name` String,\n"
+        "    `kind` Enum8('migration' = 1, 'baseline' = 2) DEFAULT 'migration',\n"
         "    `up` String,\n"
         "    `rollback` String,\n"
         "    `dt` DateTime64(3) DEFAULT now(),\n"
@@ -274,6 +276,101 @@ def test_get_migrations_for_rollback(
     assert all_migrations_for_rollback[0].name == test_tables_from_migration[2]
     assert all_migrations_for_rollback[0].up == expected_up_3
     assert all_migrations_for_rollback[0].rollback == "-- @stmt\nDROP TABLE IF EXISTS test_table_3"
+
+
+def test_baseline_records_sorted_rows_without_parsing_files(
+    migrator: Migrator, migrator_init: None, ch_client: Client
+) -> None:
+    filenames = [
+        "20990101000002_second.sql",
+        "20990101000001_first.sql",
+    ]
+    for filename in filenames:
+        with open(f"{DEFAULT_MIGRATIONS_DIR}/{filename}", "w", encoding="utf-8") as f:
+            f.write("this is not a parsed migration file")
+
+    with patch("py_clickhouse_migrator.migrator.load_migration_sections") as mock_load:
+        result = migrator.baseline()
+
+    mock_load.assert_not_called()
+    assert result == [
+        "20990101000001_first.sql",
+        "20990101000002_second.sql",
+    ]
+    rows = ch_client.execute(
+        "SELECT name, toString(kind), up, rollback, checksum FROM db_migrations ORDER BY dt",
+    )
+    assert rows == [
+        ("20990101000001_first.sql", "baseline", "", "", ""),
+        ("20990101000002_second.sql", "baseline", "", "", ""),
+    ]
+
+
+def test_baseline_without_sql_files_returns_empty_result(
+    migrator: Migrator,
+    migrator_init: None,
+    ch_client: Client,
+) -> None:
+    result = migrator.baseline()
+
+    assert result == []
+    assert ch_client.execute("SELECT count() FROM db_migrations")[0][0] == 0
+
+
+def test_baseline_requires_empty_db_migrations(migrator: Migrator, migrator_init: None, ch_client: Client) -> None:
+    filename = create_test_migration(
+        name="baseline_guard",
+        up="CREATE TABLE IF NOT EXISTS baseline_guard (id Integer) Engine=MergeTree() ORDER BY id;",
+        rollback="DROP TABLE IF EXISTS baseline_guard",
+    )
+    migrator.up()
+
+    with pytest.raises(BaselineError, match="Baseline requires an empty db_migrations table."):
+        migrator.baseline()
+
+    rows = ch_client.execute("SELECT name, toString(kind) FROM db_migrations ORDER BY dt")
+    assert rows == [(filename, "migration")]
+
+    ch_client.execute("DROP TABLE IF EXISTS baseline_guard")
+
+
+def test_up_after_baseline_applies_only_new_migrations_and_rollback_ignores_baselines(
+    migrator: Migrator, migrator_init: None, ch_client: Client
+) -> None:
+    baselined_filename = create_test_migration(
+        name="old_schema",
+        up="CREATE TABLE IF NOT EXISTS old_schema (id Integer) Engine=MergeTree() ORDER BY id;",
+        rollback="DROP TABLE IF EXISTS old_schema",
+    )
+
+    migrator.baseline()
+
+    assert not table_exists(ch_client, "old_schema")
+
+    new_filename = create_test_migration(
+        name="new_schema",
+        up="CREATE TABLE IF NOT EXISTS new_schema (id Integer) Engine=MergeTree() ORDER BY id;",
+        rollback="DROP TABLE IF EXISTS new_schema",
+    )
+
+    migrator.up()
+
+    rows = dict(ch_client.execute("SELECT name, toString(kind) FROM db_migrations"))
+    assert rows == {
+        baselined_filename: "baseline",
+        new_filename: "migration",
+    }
+    assert table_exists(ch_client, "new_schema")
+
+    rollback_candidates = migrator.get_migrations_for_rollback(number=10)
+    assert [migration.name for migration in rollback_candidates] == [new_filename]
+
+    migrator.rollback(number=10)
+
+    assert not table_exists(ch_client, "new_schema")
+    assert ch_client.execute("SELECT name, toString(kind) FROM db_migrations ORDER BY dt") == [
+        (baselined_filename, "baseline"),
+    ]
 
 
 def test_create_migration_file_default_name(migrator_init: None) -> None:
