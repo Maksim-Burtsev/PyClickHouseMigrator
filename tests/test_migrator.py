@@ -290,9 +290,13 @@ def test_baseline_records_sorted_rows_without_parsing_files(
             f.write("this is not a parsed migration file")
 
     with patch("py_clickhouse_migrator.migrator.load_migration_sections") as mock_load:
-        migrator.baseline()
+        result = migrator.baseline()
 
     mock_load.assert_not_called()
+    assert result == [
+        "20990101000001_first.sql",
+        "20990101000002_second.sql",
+    ]
     rows = ch_client.execute(
         "SELECT name, toString(kind), up, rollback, checksum FROM db_migrations ORDER BY dt",
     )
@@ -306,12 +310,10 @@ def test_baseline_without_sql_files_is_noop(
     migrator: Migrator,
     migrator_init: None,
     ch_client: Client,
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    with caplog.at_level(logging.INFO, logger="py_clickhouse_migrator"):
-        migrator.baseline()
+    result = migrator.baseline()
 
-    assert "No SQL migration files found to baseline." in caplog.text
+    assert result == []
     assert ch_client.execute("SELECT count() FROM db_migrations")[0][0] == 0
 
 

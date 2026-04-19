@@ -192,9 +192,19 @@ def baseline(
         with MigrationLock(
             client=migrator.ch_client, db=migrator.get_db_name(), ttl=lock_ttl, retry_count=lock_retry, cluster=cluster
         ):
-            migrator.baseline()
+            migration_names = migrator.baseline()
     else:
-        migrator.baseline()
+        migration_names = migrator.baseline()
+
+    if not migration_names:
+        click.echo(click.style("No SQL migration files found to baseline.", fg="yellow"))
+        return
+
+    migration_count = len(migration_names)
+    summary = f"Baselined {migration_count} migration(s)."
+    click.echo(click.style(summary, fg="green", bold=True))
+    for name in migration_names:
+        click.echo(f"  {click.style('[B]', fg='cyan')} {name}")
 
 
 @click.command()

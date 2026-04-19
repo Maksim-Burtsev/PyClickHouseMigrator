@@ -7,6 +7,7 @@ import os
 from collections.abc import Generator
 from unittest.mock import MagicMock, patch
 
+import click
 import pytest
 from click.testing import CliRunner
 
@@ -309,17 +310,24 @@ def test_cli_show_warning_to_stderr(runner: CliRunner, mock_migrator: MagicMock)
 
 
 def test_cli_baseline_no_lock(runner: CliRunner, mock_migrator: MagicMock) -> None:
+    mock_migrator.baseline.return_value = ["001.sql", "002.sql"]
+
     with patch("py_clickhouse_migrator.cli.MigrationLock") as mock_lock_cls:
         result = runner.invoke(main, ["--url", FAKE_URL, "baseline", "--no-lock"])
 
     assert result.exit_code == 0
     mock_lock_cls.assert_not_called()
     mock_migrator.baseline.assert_called_once_with()
+    assert "Baselined 2 migration(s)." in result.output
+    assert "[B]" in result.output
+    assert "001.sql" in result.output
+    assert "002.sql" in result.output
 
 
 def test_cli_baseline_with_lock(runner: CliRunner, mock_migrator: MagicMock) -> None:
     mock_migrator.get_db_name.return_value = "test"
     mock_migrator.ch_client = MagicMock()
+    mock_migrator.baseline.return_value = ["001.sql"]
 
     with patch("py_clickhouse_migrator.cli.MigrationLock") as mock_lock_cls:
         mock_lock_instance = MagicMock()
@@ -333,6 +341,27 @@ def test_cli_baseline_with_lock(runner: CliRunner, mock_migrator: MagicMock) -> 
     mock_lock_cls.assert_called_once()
     mock_lock_instance.__enter__.assert_called_once()
     mock_migrator.baseline.assert_called_once_with()
+    assert "Baselined 1 migration(s)." in result.output
+    assert "001.sql" in result.output
+
+
+def test_cli_baseline_no_files_output_visible_with_quiet(runner: CliRunner, mock_migrator: MagicMock) -> None:
+    mock_migrator.baseline.return_value = []
+
+    result = runner.invoke(main, ["--url", FAKE_URL, "--quiet", "baseline", "--no-lock"])
+
+    assert result.exit_code == 0
+    assert "No SQL migration files found to baseline." in result.output
+
+
+def test_cli_baseline_color_output(runner: CliRunner, mock_migrator: MagicMock) -> None:
+    mock_migrator.baseline.return_value = ["001.sql"]
+
+    result = runner.invoke(main, ["--url", FAKE_URL, "baseline", "--no-lock"], color=True)
+
+    assert result.exit_code == 0
+    assert click.style("Baselined 1 migration(s).", fg="green", bold=True) in result.output
+    assert click.style("[B]", fg="cyan") in result.output
 
 
 def test_cli_baseline_handled_exception_clean_output(runner: CliRunner) -> None:
