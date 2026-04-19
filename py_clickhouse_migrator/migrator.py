@@ -82,7 +82,7 @@ class Migration:
     name: str
     up: SQL
     rollback: SQL
-    kind: str = MigrationKind.MIGRATION.value
+    kind: str = MigrationKind.MIGRATION
 
     @cached_property
     def _statements(self) -> MigrationStatements:
@@ -101,7 +101,7 @@ class Migration:
 
     @property
     def is_baseline(self) -> bool:
-        return self.kind == MigrationKind.BASELINE.value
+        return self.kind == MigrationKind.BASELINE
 
 
 def create_migrations_dir(migrations_dir: str = DEFAULT_MIGRATIONS_DIR) -> None:
@@ -184,7 +184,7 @@ class Migrator(object):
         migrator_table: SQL = f"""
         CREATE TABLE IF NOT EXISTS db_migrations {on_cluster} (
             name String,
-            kind Enum8('migration' = 1, 'baseline' = 2) DEFAULT '{MigrationKind.MIGRATION.value}',
+            kind Enum8('migration' = 1, 'baseline' = 2) DEFAULT '{MigrationKind.MIGRATION}',
             up String,
             rollback String,
             dt DateTime64 DEFAULT now(),
@@ -366,13 +366,14 @@ class Migrator(object):
         return [
             Migration(name=row[0], up=row[1], rollback=row[2], kind=row[3])
             for row in self.ch_client.execute(
-                f"""
+                """
                 SELECT name, up, rollback, kind
                 FROM db_migrations
-                WHERE kind = '{MigrationKind.MIGRATION.value}'
+                WHERE kind = %(kind)s
                 ORDER BY dt DESC
-                LIMIT {number}
+                LIMIT %(number)s
                 """,
+                {"kind": MigrationKind.MIGRATION.value, "number": number},
                 settings=self._settings,
             )
         ]
