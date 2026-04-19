@@ -341,7 +341,7 @@ class Migrator(object):
 
     def baseline(self) -> list[str]:
         if self.get_applied_migrations_names():
-            raise BaselineError("Baseline requires an empty db_migrations ledger.")
+            raise BaselineError("Baseline requires an empty db_migrations table.")
         filenames = sorted(file for file in os.listdir(self.migrations_dir) if file.endswith(".sql"))
         if filenames:
             self.save_baselined_migrations(filenames)

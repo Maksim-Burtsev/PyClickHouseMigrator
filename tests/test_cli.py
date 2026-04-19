@@ -366,12 +366,12 @@ def test_cli_baseline_color_output(runner: CliRunner, mock_migrator: MagicMock) 
 
 def test_cli_baseline_handled_exception_clean_output(runner: CliRunner) -> None:
     with patch("py_clickhouse_migrator.cli.Migrator") as mock_cls:
-        mock_cls.return_value.baseline.side_effect = BaselineError("Baseline requires an empty db_migrations ledger.")
+        mock_cls.return_value.baseline.side_effect = BaselineError("Baseline requires an empty db_migrations table.")
         result = runner.invoke(main, ["--url", FAKE_URL, "baseline", "--no-lock"])
 
     assert result.exit_code == 1
     assert "Error: " in result.stderr
-    assert "Baseline requires an empty db_migrations ledger." in result.stderr
+    assert "Baseline requires an empty db_migrations table." in result.stderr
     assert "Traceback" not in result.output
 
 

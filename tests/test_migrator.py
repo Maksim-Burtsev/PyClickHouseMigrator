@@ -306,7 +306,7 @@ def test_baseline_records_sorted_rows_without_parsing_files(
     ]
 
 
-def test_baseline_without_sql_files_is_noop(
+def test_baseline_without_sql_files_returns_empty_result(
     migrator: Migrator,
     migrator_init: None,
     ch_client: Client,
@@ -317,7 +317,7 @@ def test_baseline_without_sql_files_is_noop(
     assert ch_client.execute("SELECT count() FROM db_migrations")[0][0] == 0
 
 
-def test_baseline_requires_empty_ledger(migrator: Migrator, migrator_init: None, ch_client: Client) -> None:
+def test_baseline_requires_empty_db_migrations(migrator: Migrator, migrator_init: None, ch_client: Client) -> None:
     filename = create_test_migration(
         name="baseline_guard",
         up="CREATE TABLE IF NOT EXISTS baseline_guard (id Integer) Engine=MergeTree() ORDER BY id;",
@@ -325,7 +325,7 @@ def test_baseline_requires_empty_ledger(migrator: Migrator, migrator_init: None,
     )
     migrator.up()
 
-    with pytest.raises(BaselineError, match="Baseline requires an empty db_migrations ledger."):
+    with pytest.raises(BaselineError, match="Baseline requires an empty db_migrations table."):
         migrator.baseline()
 
     rows = ch_client.execute("SELECT name, toString(kind) FROM db_migrations ORDER BY dt")
