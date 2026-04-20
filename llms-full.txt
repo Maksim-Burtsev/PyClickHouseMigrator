@@ -1,14 +1,22 @@
 # PyClickHouseMigrator
 
 > Lightweight, ORM-free Python CLI for ClickHouse schema migrations.
-> Advisory locking for concurrent execution protection.
-> Supports single-node and cluster (ON CLUSTER) modes with replicated service tables.
+> SQL-first workflow with advisory locking, checksum validation, baseline, and cluster support.
 
 ## Overview
 
-PyClickHouseMigrator is a CLI tool for managing ClickHouse schema migrations. It uses plain Python files as migrations — each file contains `up()` and `rollback()` functions that return SQL strings. The tool tracks applied migrations in a ClickHouse table, supports advisory locking for concurrent execution protection, checksum validation to detect modified migrations, dry-run mode, and cluster support with `ON CLUSTER` DDL and replicated service tables.
+PyClickHouseMigrator manages ClickHouse schema migrations from `.sql` files. It tracks applied migrations in ClickHouse service tables, supports rollback, dry-run mode, best-effort preflight validation, advisory locking, checksum validation, and cluster mode with replicated service tables.
 
-Dependencies: `clickhouse-driver` and `click`. No ORM, no SQLAlchemy, no heavy frameworks.
+Dependencies: `clickhouse-driver` and `click`.
+
+Current package version: `1.1.0`.
+
+## Planning Facts
+
+- As of April 2026, the project has no users and no compatibility commitments
+- The switch to `.sql` should not be treated as a breaking-change concern in planning
+- That question should not be re-opened in every new session unless new facts appear
+- `_migrations_lock` retention or cleanup is not a required task without evidence of a real operational issue
 
 ## Installation
 
@@ -16,13 +24,78 @@ Dependencies: `clickhouse-driver` and `click`. No ORM, no SQLAlchemy, no heavy f
 pip install py-clickhouse-migrator
 ```
 
-Or with uv:
+Or with `uv`:
 
 ```sh
 uv add py-clickhouse-migrator
 ```
 
-PyPI package name: `py-clickhouse-migrator`. CLI entry point: `migrator`.
+PyPI package name: `py-clickhouse-migrator`.
+CLI entry point: `migrator`.
+
+## Migration Format
+
+Only `.sql` files are discovered from the migrations directory.
+
+Canonical filename format:
+
+```text
+YYYYMMDDHHMMSS_name.sql
+```
+
+Canonical file format:
+
+```sql
+-- migrator:up
+-- @stmt
+CREATE TABLE IF NOT EXISTS users (
+    id UInt64,
+    name String,
+    created_at DateTime DEFAULT now()
+) ENGINE = MergeTree()
+ORDER BY id;
+
+-- migrator:down
+-- @stmt
+DROP TABLE IF EXISTS users;
+```
+
+Validation rules:
+
+- exactly one `-- migrator:up`
+- exactly one `-- migrator:down`
+- `up` must contain at least one non-empty `-- @stmt` block
+- every non-empty statement block must start with `-- @stmt`
+- non-empty SQL outside `-- @stmt` blocks is invalid
+- `down` may be empty
+
+Multiple statements use multiple `-- @stmt` blocks:
+
+```sql
+-- migrator:up
+-- @stmt
+CREATE TABLE IF NOT EXISTS users (
+    id UInt64,
+    name String
+) ENGINE = MergeTree()
+ORDER BY id;
+
+-- @stmt
+CREATE TABLE IF NOT EXISTS events (
+    id UInt64,
+    user_id UInt64
+) ENGINE = MergeTree()
+ORDER BY id;
+
+-- migrator:down
+-- @stmt
+DROP TABLE IF EXISTS events;
+
+-- @stmt
+DROP TABLE IF EXISTS users;
+```
+
+Pending migrations are applied in lexicographic filename order via `sorted(name)`.
 
 ## CLI Commands
 
@@ -32,224 +105,184 @@ These options apply to all commands and can be set via environment variables:
 
 | Option | Env Variable | Default | Description |
 |--------|-------------|---------|-------------|
-| `--url` | `CLICKHOUSE_MIGRATE_URL` | (required for DB commands) | ClickHouse connection URL |
-| `--path` | `CLICKHOUSE_MIGRATE_DIR` | `./db/migrations` | Migrations directory path |
-| `--cluster` | `CLICKHOUSE_MIGRATE_CLUSTER` | (empty) | Cluster name for ON CLUSTER DDL |
+| `--url` | `CLICKHOUSE_MIGRATE_URL` | required for DB commands | ClickHouse connection URL |
+| `--path` | `CLICKHOUSE_MIGRATE_DIR` | `./db/migrations` | Migrations directory |
+| `--cluster` | `CLICKHOUSE_MIGRATE_CLUSTER` | empty | Cluster name for service tables |
 | `--connect-retries` | `CLICKHOUSE_MIGRATE_CONNECT_RETRIES` | `0` | Connection retry attempts |
 | `--connect-retries-interval` | `CLICKHOUSE_MIGRATE_CONNECT_RETRIES_INTERVAL` | `1` | Seconds between retries |
 | `--send-receive-timeout` | `CLICKHOUSE_MIGRATE_SEND_RECEIVE_TIMEOUT` | `600` | Query timeout in seconds |
 | `-v, --verbose` | — | off | Enable DEBUG logging |
-| `-q, --quiet` | — | off | Suppress all output except errors |
+| `-q, --quiet` | — | off | Suppress logger output except errors |
 | `--version` | — | — | Show version and exit |
 
-Connection URL format: `clickhouse://user:password@host:port/database`
+Connection URL format:
+
+```text
+clickhouse://user:password@host:port/database
+```
+
+Only global options have environment variable equivalents. Per-command options like `--dry-run`, `--lock-ttl`, and `--all` are CLI-only.
 
 ### `init`
 
-Create the migrations directory. Works offline — no ClickHouse connection required.
+Create the migrations directory. Works offline.
 
 ```sh
 migrator init
 migrator --path ./my/migrations init
 ```
 
-Creates `./db/migrations` (or the path specified by `--path` / `CLICKHOUSE_MIGRATE_DIR`).
-
 ### `new`
 
-Create a new timestamped migration file. Works offline — no ClickHouse connection required.
+Create a new timestamped SQL migration file. Works offline.
 
 ```sh
 migrator new create_users_table
-migrator new                      # creates file without name suffix (warning issued)
+migrator new
 ```
 
-| Argument | Required | Description |
-|----------|----------|-------------|
-| `NAME` | no | Migration name suffix. Only letters, digits, and underscores allowed. |
+Name is optional. Only letters, digits, and underscores are allowed.
 
-Generated filename format: `YYYYMMDDHHmmss_name.py` (or `YYYYMMDDHHmmss.py` without name).
+Generated template:
 
-Generated file template:
-
-```python
-def up() -> str:
-    return """
-    """
+```sql
+-- migrator:up
+-- @stmt
 
 
-def rollback() -> str:
-    return """
-    """
+-- migrator:down
+-- @stmt
 ```
 
 ### `up`
 
-Apply pending migrations. Requires ClickHouse connection.
+Apply pending migrations.
 
 ```sh
-migrator up              # apply all pending
-migrator up 3            # apply next 3 pending
-migrator up --dry-run    # print SQL without executing
-migrator up --no-lock    # disable distributed lock
-migrator up --allow-dirty  # skip checksum validation
-```
-
-| Argument/Option | Default | Description |
-|-----------------|---------|-------------|
-| `N` | all | Number of migrations to apply (positional, optional) |
-| `--lock / --no-lock` | `--lock` | Enable/disable distributed lock |
-| `--lock-ttl` | `600` | Lock TTL in seconds (min: 1) |
-| `--lock-retry` | `3` | Lock acquire retry attempts (min: 0) |
-| `--dry-run` | off | Print SQL without executing |
-| `--allow-dirty` | off | Skip checksum validation for modified files |
-
-Output example:
-
-```
-20250318090000_create_users.py applied [✔]
-20250319120000_create_events.py applied [✔]
-```
-
-When `--lock` is enabled and there are no pending migrations, the lock is skipped entirely.
-
-### `rollback`
-
-Rollback applied migrations in reverse order. Requires ClickHouse connection.
-
-```sh
-migrator rollback        # rollback last 1
-migrator rollback 3      # rollback last 3
-migrator rollback --dry-run
-```
-
-| Argument/Option | Default | Description |
-|-----------------|---------|-------------|
-| `N` | `1` | Number of migrations to rollback (positional, optional) |
-| `--lock / --no-lock` | `--lock` | Enable/disable distributed lock |
-| `--lock-ttl` | `600` | Lock TTL in seconds |
-| `--lock-retry` | `3` | Lock acquire retry attempts |
-| `--dry-run` | off | Print SQL without executing |
-
-Output example:
-
-```
-20250319120000_create_events.py rolled back [✔].
-```
-
-### `show`
-
-Display migration status, integrity information, and HEAD pointer. Requires ClickHouse connection.
-
-```sh
-migrator show            # last 5 applied + all pending
-migrator show --all      # all applied + all pending
+migrator up
+migrator up 3
+migrator up --dry-run
+migrator up --no-validate
+migrator up --allow-dirty
 ```
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--all` | off | Show all applied migrations (default: last 5) |
+| `N` | all | Number of migrations to apply |
+| `--lock / --no-lock` | `--lock` | Enable or disable distributed lock |
+| `--lock-ttl` | `600` | Lock TTL in seconds |
+| `--lock-retry` | `3` | Lock acquire retry attempts |
+| `--dry-run` | off | Print migration SQL without executing it |
+| `--validate / --no-validate` | `--validate` | Enable or disable preflight validation |
+| `--allow-dirty` | off | Skip checksum validation |
 
-Output example:
+Behavior:
 
+- runs checksum validation unless `--allow-dirty`
+- runs preflight validation unless `--no-validate`
+- skips lock acquisition entirely when there are no pending migrations
+
+Dry-run prints the SQL sections without executing them.
+
+### `rollback`
+
+Rollback applied migrations in reverse `dt` order.
+
+```sh
+migrator rollback
+migrator rollback 3
+migrator rollback --dry-run
+migrator rollback --no-validate
 ```
-Applied:
-  [X] 20250320143022_add_indexes.py (HEAD)
-  [X] 20250319120000_create_events.py
-  [X] 20250318090000_create_users.py
 
-Pending:
-  [ ] 20250321100000_add_status_column.py
+| Option | Default | Description |
+|--------|---------|-------------|
+| `N` | `1` | Number of migrations to rollback |
+| `--lock / --no-lock` | `--lock` | Enable or disable distributed lock |
+| `--lock-ttl` | `600` | Lock TTL in seconds |
+| `--lock-retry` | `3` | Lock acquire retry attempts |
+| `--dry-run` | off | Print rollback SQL without executing it |
+| `--validate / --no-validate` | `--validate` | Enable or disable preflight validation |
 
-Applied: 3 | Pending: 1
+Rollback only targets rows with `kind = 'migration'`. Baselined rows are ignored.
+
+### `show`
+
+Display migration status and integrity info.
+
+```sh
+migrator show
+migrator show --all
 ```
 
-`[X]` is colored green, `[ ]` is dimmed. The most recent applied migration is marked `(HEAD)` in cyan. Modified migrations show `(modified)` in yellow, missing files show `(missing)` in red. If integrity issues exist, a warning block is printed to stderr.
+Behavior:
+
+- latest applied row is marked `HEAD`
+- baselined rows are marked `baseline`
+- checksum mismatches are marked `modified`
+- missing applied files are marked `missing`
+- integrity warnings are returned separately and printed to `stderr` by the CLI
+
+Default output shows the latest 5 applied migrations plus all pending migrations. `--all` shows all applied rows.
+
+### `baseline`
+
+Mark all current `.sql` files as already applied without executing their SQL.
+
+```sh
+migrator baseline
+migrator baseline --no-lock
+```
+
+Semantics:
+
+- requires an empty `db_migrations` table
+- records one row per discovered `.sql` file with `kind = 'baseline'`
+- stores empty `up`, `rollback`, and `checksum`
+- does not parse or execute migration SQL
+- allows `up` to apply only later migrations
+
+`baseline` and `--dry-run` do different things:
+
+- `--dry-run` prints and optionally validates SQL, but writes nothing
+- `baseline` writes ledger state, but executes no SQL
 
 ### `repair`
 
-Update stored checksums in `db_migrations` to match current migration files. Use after intentionally editing an already-applied migration. Requires ClickHouse connection.
+Recalculate checksums from current files and update stored rows in `db_migrations`.
 
 ```sh
 migrator repair
 ```
 
-No options. Shows which migrations have mismatched checksums, updates them, and reports the count. Skips migrations whose files are missing.
+Missing files are reported and skipped.
 
 ### `force-unlock`
 
-Manually release a stuck migration lock. Use when a deployment crashed mid-migration and the lock wasn't released. Requires ClickHouse connection.
+Force a release row into the lock table.
 
 ```sh
 migrator force-unlock
 ```
 
-No options. Inserts a release row into the lock table regardless of who holds the lock.
-
 ### `lock-info`
 
-Show current lock holder and expiration time. Requires ClickHouse connection.
+Show active lock holder and expiration time.
 
 ```sh
 migrator lock-info
 ```
 
-Output when locked:
-
-```
-Locked by: hostname:pid
-Locked at: 2025-03-20 14:30:22
-Expires at: 2025-03-20 14:35:22
-```
-
-Output when unlocked:
-
-```
-No active lock.
-```
-
 ## How It Works
-
-### Migration Files
-
-Migrations live in the migrations directory (default `./db/migrations`). Each migration is a Python file with two functions:
-
-- `up() -> str` — returns SQL to apply the migration
-- `rollback() -> str` — returns SQL to reverse the migration
-
-Filename format: `YYYYMMDDHHmmss_optional_name.py`. Files are sorted lexicographically to determine execution order.
-
-Multiple SQL statements can be separated by `;`. Each statement is executed independently.
-
-Example migration:
-
-```python
-def up() -> str:
-    return """
-    CREATE TABLE IF NOT EXISTS users (
-        id UInt64,
-        name String,
-        created_at DateTime DEFAULT now()
-    ) ENGINE = MergeTree()
-    ORDER BY id
-    """
-
-
-def rollback() -> str:
-    return """
-    DROP TABLE IF EXISTS users
-    """
-```
-
-Empty `up()` functions (returning only whitespace) are skipped with a warning.
 
 ### Migration Tracking
 
-Applied migrations are stored in a `db_migrations` table, created automatically on first use:
+Applied and baselined migrations are stored in `db_migrations`:
 
 ```sql
 CREATE TABLE IF NOT EXISTS db_migrations (
     name String,
+    kind Enum8('migration' = 1, 'baseline' = 2) DEFAULT 'migration',
     up String,
     rollback String,
     dt DateTime64 DEFAULT now(),
@@ -258,15 +291,49 @@ CREATE TABLE IF NOT EXISTS db_migrations (
 ORDER BY dt
 ```
 
-The `up` and `rollback` columns store the SQL text at the time of application, so rollbacks work even if the migration file is later deleted. The `dt` column determines ordering.
+Important behavior:
 
-Rollback deletes the row from `db_migrations` using a lightweight `DELETE` with `mutations_sync=1`.
+- `migration` rows store the exact `up` and `rollback` section text used at apply time
+- `baseline` rows store only the name, kind, and `dt`
+- `HEAD`, rollback order, and applied history are based on `dt`
+- pending order is based on filename sorting
+
+Rollback uses:
+
+```sql
+SELECT name, up, rollback, kind
+FROM db_migrations
+WHERE kind = 'migration'
+ORDER BY dt DESC
+LIMIT N
+```
+
+### Statement Parsing and Validation
+
+The parser loads the raw `up` and `down` sections, then extracts statement blocks from `-- @stmt` markers.
+
+Implications:
+
+- no blind `split(";")` execution model
+- markers define statement boundaries
+- adding or removing `-- @stmt` markers without changing SQL does not count as a semantic checksum change
+
+Preflight validation uses `EXPLAIN AST ...` for each statement. It is best-effort, not a guarantee that execution will succeed.
+
+### Checksum Validation
+
+Checksums are computed from parsed statement lists in `up` and `down`, not from raw file bytes. This avoids treating marker-only changes as checksum drift.
+
+Behavior:
+
+- checksum validation runs on `kind = 'migration'` rows only
+- baselines are excluded
+- missing files are reported as integrity issues
+- `repair` updates stored checksum values for files that still exist
 
 ### Locking
 
-The lock prevents concurrent migration runs (e.g. multiple CI/CD runners deploying simultaneously).
-
-Lock table (`_migrations_lock`):
+The lock table:
 
 ```sql
 CREATE TABLE IF NOT EXISTS _migrations_lock (
@@ -279,89 +346,44 @@ CREATE TABLE IF NOT EXISTS _migrations_lock (
 ORDER BY lock_id
 ```
 
-How it works:
+Cluster mode uses:
 
-1. **Acquire**: Insert a row with `is_locked=1` and `expires_at = now + TTL`. Then query with `FINAL` to get the latest row. If `locked_by` matches the current process, lock is acquired.
-2. **Release**: Insert a row with `is_locked=0`. The `ReplacingMergeTree` engine ensures the latest row (by `locked_at`) wins on `FINAL` queries.
-3. **Expiration**: The `WHERE expires_at > now64(3)` clause in the active lock query means expired locks are automatically ignored.
-4. **Retry**: If the lock is held, the process waits `retry_delay` seconds and retries up to `retry_count` times.
-5. **Identity**: Lock holder is identified as `hostname:pid`.
-
-### Checksum Validation
-
-When a migration is applied, the SHA-256 hash of the SQL output from its `up()` and `rollback()` functions is stored in the `checksum` column of `db_migrations`. The two outputs are normalized, joined with a null byte separator, and hashed.
-
-On each `up` run, stored checksums are compared with the current SQL output of each migration's functions. If a mismatch is found:
-
-- Without `--allow-dirty`: raises `ChecksumMismatchError` and aborts
-- With `--allow-dirty`: logs a warning and continues
-
-Whitespace normalization: blank lines (containing only whitespace) are removed, trailing whitespace is stripped from remaining lines, then lines are joined by `\n`.
-
-The `repair` command recalculates checksums from current files and updates the stored values. Missing files are skipped.
-
-The `show` command displays per-migration integrity status (ok, modified, or missing).
-
-## Configuration
-
-All configuration can be provided via CLI options, environment variables, or a mix of both. CLI options take precedence over environment variables.
-
-| CLI Option | Env Variable | Default | Type |
-|------------|-------------|---------|------|
-| `--url` | `CLICKHOUSE_MIGRATE_URL` | — | string (URL) |
-| `--path` | `CLICKHOUSE_MIGRATE_DIR` | `./db/migrations` | string (path) |
-| `--cluster` | `CLICKHOUSE_MIGRATE_CLUSTER` | — | string |
-| `--connect-retries` | `CLICKHOUSE_MIGRATE_CONNECT_RETRIES` | `0` | int (min 0) |
-| `--connect-retries-interval` | `CLICKHOUSE_MIGRATE_CONNECT_RETRIES_INTERVAL` | `1` | int (min 0) |
-| `--send-receive-timeout` | `CLICKHOUSE_MIGRATE_SEND_RECEIVE_TIMEOUT` | `600` | int |
-| `-v, --verbose` | — | off | flag |
-| `-q, --quiet` | — | off | flag |
-
-Per-command options (`--lock-ttl`, `--lock-retry`, `--dry-run`, `--allow-dirty`, `--all`) do not have environment variable equivalents.
-
-The `--url` option is required for all commands except `init` and `new`, which work offline.
-
-## Cluster Mode
-
-When `--cluster` (or `CLICKHOUSE_MIGRATE_CLUSTER`) is set:
-
-**What changes:**
-
-- `db_migrations` table uses `ReplicatedMergeTree('/clickhouse/tables/{uuid}/{shard}', '{replica}')` engine and is created with `ON CLUSTER`
-- `_migrations_lock` table uses `ReplicatedReplacingMergeTree('/clickhouse/tables/{uuid}/{shard}', '{replica}', locked_at)` engine and is created with `ON CLUSTER`
-- All writes to service tables use `insert_quorum: auto` and `select_sequential_consistency: 1` settings for strong consistency across replicas
-
-**What does NOT change:**
-
-- Your migration SQL is executed as-is. If you need `ON CLUSTER` in your DDL, you must include it in the migration yourself.
-
-Example:
-
-```sh
-export CLICKHOUSE_MIGRATE_CLUSTER=my_cluster
-migrator up
+```sql
+ReplicatedReplacingMergeTree('/clickhouse/tables/{uuid}/{shard}', '{replica}', locked_at)
 ```
 
-Migration with ON CLUSTER:
+Lock flow:
 
-```python
-def up() -> str:
-    return """
-    CREATE TABLE IF NOT EXISTS users ON CLUSTER my_cluster (
-        id UInt64,
-        name String
-    ) ENGINE = ReplicatedMergeTree('/clickhouse/tables/{uuid}/{shard}', '{replica}')
-    ORDER BY id
-    """
+1. insert a candidate lock row with `is_locked = 1`
+2. read active lock with `FINAL`
+3. if the latest row belongs to the current process, lock is acquired
+4. release inserts a new row with `is_locked = 0`
+5. expired locks are ignored by `expires_at > now64(3)`
 
+Lock holder format:
 
-def rollback() -> str:
-    return """
-    DROP TABLE IF EXISTS users ON CLUSTER my_cluster
-    """
+```text
+hostname:pid:xxxxxxxx
 ```
+
+This lock is advisory and best-effort, not a strict distributed mutex.
+
+### Cluster Mode
+
+When `--cluster` is set:
+
+- `db_migrations` is created with `ON CLUSTER` and a replicated MergeTree engine
+- `_migrations_lock` is created with `ON CLUSTER` and a replicated ReplacingMergeTree engine
+- writes use `insert_quorum = auto` and `select_sequential_consistency = 1`
+
+What does not change:
+
+- migration SQL is executed exactly as written
+- if user DDL needs `ON CLUSTER`, it must appear in the migration itself
 
 ## Python API
+
+Example:
 
 ```python
 from py_clickhouse_migrator import Migrator
@@ -370,32 +392,63 @@ migrator = Migrator(
     database_url="clickhouse://default@localhost:9000/mydb",
     migrations_dir="./db/migrations",
 )
+
 migrator.up()
 ```
 
-The `Migrator` class accepts the same parameters as the CLI global options: `database_url`, `migrations_dir`, `cluster`, `connect_retries`, `connect_retries_interval`, `send_receive_timeout`.
+Useful methods:
 
-Key public methods: `up()`, `rollback()`, `show_migrations()`, `validate_checksums()`, `repair()`.
+- `up()`
+- `rollback()`
+- `baseline()`
+- `show_migrations()`
+- `validate_checksums()`
+- `repair()`
+- `get_unapplied_migration_names()`
+- `get_applied_migrations_names()`
 
-Public exports from `py_clickhouse_migrator`: `Migrator`, `MigrationLock`, `LockError`, `LockTimeoutError`, `ChecksumMismatchError`, `DatabaseNotFoundError`, `ShowMigrationsResult`, `ChecksumMismatch`, `compute_checksum`, `create_migration_file`, `create_migrations_dir`, `make_migration_filename`, `normalize_content`.
+Public exports from `py_clickhouse_migrator`:
+
+- `Migrator`
+- `MigrationLock`
+- `LockError`
+- `LockTimeoutError`
+- `ChecksumMismatchError`
+- `ClickHouseServerIsNotHealthyError`
+- `DatabaseNotFoundError`
+- `InvalidMigrationError`
+- `MigrationDirectoryNotFoundError`
+- `MissingDatabaseUrlError`
+- `ShowMigrationsResult`
+- `ChecksumMismatch`
+- `compute_checksum`
+- `normalize_content`
+- `create_migration_file`
+- `create_migrations_dir`
+- `make_migration_filename`
+
+## Operational Notes
+
+- the target database must already exist
+- `init` and `new` work offline
+- all other commands need a working ClickHouse connection
+- `--quiet` suppresses logger noise, not explicit CLI output from `show`, `dry-run`, or `baseline`
 
 ## Limitations and Gotchas
 
-**No DDL transactions.** ClickHouse does not support transactional DDL. If a migration with multiple statements (separated by `;`) fails halfway, some statements will have been applied. Always use `IF NOT EXISTS` / `IF EXISTS` to make migrations idempotent and safe to re-run.
+**Only `.sql` files are discovered.** Legacy `.py` migrations are outside the supported workflow and are not discovered by the current runner.
 
-**SQL splitting by `;`.** Migration SQL is split into statements by `;`. Semicolons inside string literals will break parsing. If you need a literal `;` in a value, use a separate migration or encode the value differently.
+**Statement markers are required.** Non-empty SQL outside `-- @stmt` blocks is an invalid migration.
 
-**Advisory lock.** The locking mechanism is best-effort, not a true distributed mutex. There is a race condition window of a few milliseconds between INSERT and verification where two processes could both acquire the lock. If you need stronger guarantees, run migrations from a single process (e.g. a Kubernetes Job or a CI/CD pipeline step).
+**No DDL transactions.** Multi-statement migrations can partially apply if a later statement fails.
 
-**Async mutations.** The `DELETE` used during rollback runs with `mutations_sync=1` to wait for completion. The `ALTER TABLE UPDATE` used by `repair` also uses `mutations_sync=1`. These are synchronous within a single node but may take time on large tables.
+**Advisory lock is best-effort.** There is still a race window between insert and verification.
 
-**Database must exist.** The migrator does not create the target database. If the database in the connection URL doesn't exist, the tool fails with a `DatabaseNotFoundError` and suggests the `CREATE DATABASE` command.
-
-**Cluster name validation.** Cluster names must match `[a-zA-Z_][a-zA-Z0-9_]*` (SQL identifier pattern). Same validation applies to database names in the lock module.
+**Target database is not auto-created.** The tool creates service tables, not the database itself.
 
 ## Project Info
 
-- Version: 1.0.0
+- Version: `1.1.0`
 - License: MIT
 - Python: 3.11, 3.12, 3.13, 3.14
 - Repository: https://github.com/Maksim-Burtsev/PyClickHouseMigrator

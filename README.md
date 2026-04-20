@@ -10,9 +10,9 @@
 [![codecov](https://codecov.io/gh/Maksim-Burtsev/PyClickHouseMigrator/branch/master/graph/badge.svg)](https://codecov.io/gh/Maksim-Burtsev/PyClickHouseMigrator)
 [![Downloads](https://static.pepy.tech/personalized-badge/py-clickhouse-migrator?period=total&units=INTERNATIONAL_SYSTEM&left_color=grey&right_color=brightgreen&left_text=downloads)](https://pepy.tech/projects/py-clickhouse-migrator)
 
-Lightweight Python tool for managing ClickHouse schema migrations. Minimal dependencies, no ORM.
+Lightweight ClickHouse schema migration tool for SQL-first workflows. Minimal dependencies, no ORM.
 
-Features: checksum validation, dry-run mode, cluster support (`ON CLUSTER` DDL, replicated service tables), rollback, migration status dashboard, auto-retry on connection failure, concurrent execution protection.
+Features: SQL migration files, checksum validation, baseline workflow for existing databases, dry-run mode, best-effort preflight validation, cluster support, rollback, status dashboard, connect retries, and concurrent execution protection.
 
 ## Install
 
@@ -25,35 +25,74 @@ pip install py-clickhouse-migrator
 ```sh
 export CLICKHOUSE_MIGRATE_URL=clickhouse://default@localhost:9000/mydb
 
-migrator init                    # create migrations directory
-migrator new create_users_table  # create migration file
-migrator up                      # apply pending migrations
-migrator show                    # check status
+migrator init
+migrator new create_users_table
+# edit the generated .sql file
+migrator up
+migrator show
 ```
 
-`init` and `new` work offline — no ClickHouse connection required.
+`init` and `new` work offline. Other commands require a ClickHouse connection.
 
 ## Migration Format
 
-```python
-def up() -> str:
-    return """
-    CREATE TABLE IF NOT EXISTS users (
-        id UInt64,
-        name String,
-        created_at DateTime DEFAULT now()
-    ) ENGINE = MergeTree()
-    ORDER BY id
-    """
+Migrations are `.sql` files discovered from the migrations directory. Canonical filename format:
 
-
-def rollback() -> str:
-    return """
-    DROP TABLE IF EXISTS users
-    """
+```text
+YYYYMMDDHHMMSS_name.sql
 ```
 
-Each migration is a Python file with `up()` and `rollback()` functions that return SQL strings. Multiple statements can be separated by `;`.
+Canonical file format:
+
+```sql
+-- migrator:up
+-- @stmt
+CREATE TABLE IF NOT EXISTS users (
+    id UInt64,
+    name String,
+    created_at DateTime DEFAULT now()
+) ENGINE = MergeTree()
+ORDER BY id;
+
+-- migrator:down
+-- @stmt
+DROP TABLE IF EXISTS users;
+```
+
+Rules:
+
+- Only `.sql` files are discovered.
+- Each file must contain exactly one `-- migrator:up` section and one `-- migrator:down` section.
+- Every non-empty SQL statement block must start with `-- @stmt`.
+- Multiple statements use multiple `-- @stmt` blocks.
+- Empty `down` is allowed.
+- Pending migrations are applied in `sorted(filename)` order.
+
+Example with multiple statements:
+
+```sql
+-- migrator:up
+-- @stmt
+CREATE TABLE IF NOT EXISTS users (
+    id UInt64,
+    name String
+) ENGINE = MergeTree()
+ORDER BY id;
+
+-- @stmt
+CREATE TABLE IF NOT EXISTS events (
+    id UInt64,
+    user_id UInt64
+) ENGINE = MergeTree()
+ORDER BY id;
+
+-- migrator:down
+-- @stmt
+DROP TABLE IF EXISTS events;
+
+-- @stmt
+DROP TABLE IF EXISTS users;
+```
 
 ## Commands
 
@@ -68,37 +107,53 @@ migrator --path ./my/migrations init
 
 ### `new`
 
-Create a new timestamped migration file.
+Create a new timestamped SQL migration file.
 
 ```sh
 migrator new create_users_table
+migrator new
 ```
 
-Name is optional. Only letters, digits, and underscores allowed.
+Name is optional. Only letters, digits, and underscores are allowed.
+
+Generated template:
+
+```sql
+-- migrator:up
+-- @stmt
+
+
+-- migrator:down
+-- @stmt
+```
 
 ### `up`
 
 Apply pending migrations.
 
 ```sh
-migrator up          # apply all pending
-migrator up 3        # apply next 3
+migrator up
+migrator up 3
+migrator up --dry-run
+migrator up --no-validate
+migrator up --allow-dirty
 ```
 
 | Option | Default | Description |
 |--------|---------|-------------|
 | `N` | all | Number of migrations to apply |
-| `--lock / --no-lock` | `--lock` | Enable/disable distributed lock |
+| `--lock / --no-lock` | `--lock` | Enable or disable distributed lock |
 | `--lock-ttl` | `600` | Lock TTL in seconds |
 | `--lock-retry` | `3` | Lock acquire retry attempts |
-| `--dry-run` | off | Print SQL without executing |
-| `--allow-dirty` | off | Skip checksum validation |
+| `--dry-run` | off | Print migration SQL without executing it |
+| `--validate / --no-validate` | `--validate` | Enable or disable preflight validation |
+| `--allow-dirty` | off | Skip checksum validation for modified files |
 
 Example output:
 
-```
-20250318090000_create_users.py applied [✔]
-20250319120000_create_events.py applied [✔]
+```text
+20250318090000_create_users.sql applied [✔]
+20250319120000_create_events.sql applied [✔]
 ```
 
 ### `rollback`
@@ -106,64 +161,102 @@ Example output:
 Rollback applied migrations in reverse order.
 
 ```sh
-migrator rollback        # rollback last 1
-migrator rollback 3      # rollback last 3
+migrator rollback
+migrator rollback 3
+migrator rollback --dry-run
+migrator rollback --no-validate
 ```
 
 | Option | Default | Description |
 |--------|---------|-------------|
 | `N` | `1` | Number of migrations to rollback |
-| `--lock / --no-lock` | `--lock` | Enable/disable distributed lock |
+| `--lock / --no-lock` | `--lock` | Enable or disable distributed lock |
 | `--lock-ttl` | `600` | Lock TTL in seconds |
 | `--lock-retry` | `3` | Lock acquire retry attempts |
-| `--dry-run` | off | Print SQL without executing |
+| `--dry-run` | off | Print rollback SQL without executing it |
+| `--validate / --no-validate` | `--validate` | Enable or disable preflight validation |
 
 Example output:
 
-```
-20250319120000_create_events.py rolled back [✔].
+```text
+20250319120000_create_events.sql rolled back [✔].
 ```
 
 ### `show`
 
-Display migration status, integrity information, and HEAD pointer.
+Display migration status, integrity info, and the current HEAD.
 
 ```sh
-migrator show        # last 5 applied + all pending
-migrator show --all  # all applied + all pending
+migrator show
+migrator show --all
 ```
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--all` | off | Show all applied migrations (default: last 5) |
+| `--all` | off | Show all applied migrations instead of only the latest 5 |
 
 Example output:
 
-```
+```text
 Applied:
-  [X] 20250320143022_add_indexes.py (HEAD)
-  [X] 20250319120000_create_events.py
-  [X] 20250318090000_create_users.py
+  [X] 20250320143022_existing_schema.sql (HEAD, baseline)
+  [X] 20250319120000_create_events.sql
 
 Pending:
-  [ ] 20250321100000_add_status_column.py
+  [ ] 20250321100000_add_status_column.sql
 
-Applied: 3 | Pending: 1
+Applied: 2 | Pending: 1
 ```
 
-Modified or missing migration files are flagged with `(modified)` or `(missing)` next to the name.
+Behavior:
+
+- `HEAD` marks the most recently recorded applied migration.
+- `baseline` marks migrations stamped by `baseline`.
+- `modified` means checksum mismatch.
+- `missing` means an applied migration file no longer exists on disk.
+- Integrity warnings are printed to `stderr`.
+
+### `baseline`
+
+Mark all current `.sql` migration files as already applied without executing their SQL. Use this to start managing an existing database.
+
+```sh
+migrator baseline
+migrator baseline --no-lock
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--lock / --no-lock` | `--lock` | Enable or disable distributed lock |
+| `--lock-ttl` | `600` | Lock TTL in seconds |
+| `--lock-retry` | `3` | Lock acquire retry attempts |
+
+Semantics:
+
+- `baseline` requires an empty `db_migrations` table.
+- `baseline` writes ledger rows only.
+- `baseline` does not execute migration SQL.
+- Later `up` applies only new migrations.
+- `rollback` ignores rows recorded as `baseline`.
+
+`dry-run` and `baseline` solve different problems:
+
+- `--dry-run` prints and optionally validates SQL, but writes nothing.
+- `baseline` writes ledger state, but executes no migration SQL.
 
 ### `repair`
 
-Update stored checksums in `db_migrations` to match current migration files. Use after intentionally editing an already-applied migration.
+Update stored checksums in `db_migrations` to match current migration files.
 
 ```sh
 migrator repair
 ```
 
+Use after intentionally editing an already-applied migration.
+
 ### `force-unlock`
 
-Manually release a stuck migration lock. Use when a deployment crashed mid-migration and the lock wasn't released.
+Manually release a stuck migration lock.
 
 ```sh
 migrator force-unlock
@@ -185,12 +278,14 @@ All global options can be set via environment variables:
 |--------|-------------|---------|-------------|
 | `--url` | `CLICKHOUSE_MIGRATE_URL` | — | ClickHouse connection URL |
 | `--path` | `CLICKHOUSE_MIGRATE_DIR` | `./db/migrations` | Migrations directory |
-| `--cluster` | `CLICKHOUSE_MIGRATE_CLUSTER` | — | Cluster name for ON CLUSTER DDL |
+| `--cluster` | `CLICKHOUSE_MIGRATE_CLUSTER` | — | Cluster name for `ON CLUSTER` service tables |
 | `--connect-retries` | `CLICKHOUSE_MIGRATE_CONNECT_RETRIES` | `0` | Connection retry attempts |
 | `--connect-retries-interval` | `CLICKHOUSE_MIGRATE_CONNECT_RETRIES_INTERVAL` | `1` | Seconds between retries |
 | `--send-receive-timeout` | `CLICKHOUSE_MIGRATE_SEND_RECEIVE_TIMEOUT` | `600` | Query timeout in seconds |
 | `-v, --verbose` | — | off | Enable DEBUG logging |
-| `-q, --quiet` | — | off | Suppress all output except errors |
+| `-q, --quiet` | — | off | Suppress logger output except errors |
+
+Only global options have environment variable equivalents. Per-command options such as `--dry-run`, `--lock-ttl`, and `--all` are CLI-only.
 
 ## Docker
 
@@ -206,33 +301,38 @@ docker run --rm \
   up
 ```
 
-Mount your migrations directory to `/migrations` inside the container.
+The image sets `CLICKHOUSE_MIGRATE_DIR=/migrations` by default.
 
 Pin to a major version tag (`:1`) or an exact version (`:1.1.0`).
 
 ## Locking
 
-When multiple processes run `migrator up` simultaneously, the advisory lock prevents double-applying migrations. Enabled by default on `up` and `rollback`.
+When multiple processes run `migrator up`, `rollback`, or `baseline` simultaneously, the advisory lock helps prevent conflicting writes. Locking is enabled by default on those commands.
 
-The lock uses a dedicated table with TTL-based expiration (default 600 seconds) and automatic retry (default 3 attempts). If you increase `--send-receive-timeout`, increase `--lock-ttl` accordingly.
+The lock uses a dedicated table with expiration-based staleness handling and optional retries. If you increase `--send-receive-timeout`, increase `--lock-ttl` accordingly.
 
-If a deployment crashes mid-migration and the lock isn't released, use `lock-info` to inspect and `force-unlock` to release it manually. Locks also expire automatically after the TTL.
+If a deployment crashes mid-migration and the lock is not released, use `lock-info` to inspect and `force-unlock` to release it manually. Expired locks are ignored automatically during acquisition.
 
 ```sh
-migrator up --no-lock              # disable locking
-migrator up --lock-ttl 600         # 10 minute TTL
-migrator up --lock-retry 5         # 5 acquire attempts
+migrator up --no-lock
+migrator up --lock-ttl 600
+migrator up --lock-retry 5
 ```
 
 ## Checksum Validation
 
-After a migration is applied, its SHA-256 file hash is stored in `db_migrations`. On subsequent `up` runs, stored hashes are compared with current files. If someone edited an already-applied migration, the tool fails — because the database state no longer matches what the migration file describes.
+After a migration is applied, the tool stores a checksum in `db_migrations`. The checksum is computed from the parsed statement lists in `up` and `down`, not from raw file bytes.
 
-`--allow-dirty` skips the check for a single run (e.g. you fixed a typo in a comment). `repair` updates all stored hashes to match current files. `show` displays integrity status per migration — ok, modified, or missing.
+Implications:
+
+- service markers like `-- @stmt` do not count as semantic changes by themselves
+- edited SQL in an already-applied migration is detected on later `up`
+- `repair` updates stored checksums to match current files
+- baseline rows are excluded from checksum validation
 
 ## Cluster Support
 
-When `--cluster` is set, the migrator creates its own service tables (`db_migrations`, `_migrations_lock`) with `ON CLUSTER` and replicated engines. Your migration SQL is used as-is — if you need `ON CLUSTER` in your DDL, include it in the migration yourself.
+When `--cluster` is set, the migrator creates its own service tables (`db_migrations`, `_migrations_lock`) with `ON CLUSTER` and replicated engines. Your migration SQL is executed as-is. If you need `ON CLUSTER` inside your DDL, include it in the migration yourself.
 
 ```sh
 export CLICKHOUSE_MIGRATE_CLUSTER=my_cluster
@@ -248,17 +348,27 @@ migrator = Migrator(
     database_url="clickhouse://default@localhost:9000/mydb",
     migrations_dir="./db/migrations",
 )
+
 migrator.up()
 ```
 
+Useful methods:
+
+- `up()`
+- `rollback()`
+- `baseline()`
+- `show_migrations()`
+- `validate_checksums()`
+- `repair()`
+
 ## Known Limitations
 
-**SQL splitting by `;`** — migration SQL is split into statements by `;`. Semicolons inside string literals will break parsing. If you need a literal `;` in a value, use a separate migration or encode the value differently.
+**Only `.sql` files are discovered.** Legacy `.py` migrations are outside the supported workflow and are not executed by the current runner.
 
-**No DDL transactions** — if a migration with multiple statements fails halfway, some statements will have been applied. Always use `IF NOT EXISTS` / `IF EXISTS` to make migrations idempotent and safe to re-run.
+**Statement markers are mandatory.** Non-empty SQL outside `-- @stmt` blocks is treated as an invalid migration format.
 
-**Advisory lock** — the locking mechanism is best-effort, not a true distributed mutex. There is a race condition window of a few milliseconds between INSERT and verification where two processes could both acquire the lock. If you need stronger guarantees, run migrations from a single process (e.g. a Kubernetes Job or a CI/CD pipeline step).
+**No DDL transactions.** If a migration with multiple statements fails halfway, some statements may already be applied. Prefer idempotent DDL such as `IF NOT EXISTS` / `IF EXISTS`.
 
-## License
+**Advisory lock is best-effort.** There is still a race window between insert and verification. For stricter guarantees, run migrations from a single orchestrated process.
 
-[MIT](LICENSE)
+**Target database must already exist.** The migrator creates service tables, not the database itself.
