@@ -34,6 +34,15 @@ migrator show
 
 `init` and `new` work offline. Other commands require a ClickHouse connection.
 
+## Comparison
+
+| Approach | Good at | Tradeoffs |
+|----------|---------|-----------|
+| Hand-written SQL scripts | Maximum flexibility, no tooling overhead | No applied-history ledger, no checksum validation, no built-in rollback workflow |
+| GUI DB tools / schema export | Fast inspection and one-off schema export | Not a migration workflow, no deterministic apply history, no CLI-first deployment path |
+| General migration frameworks | Rich ecosystems, cross-database abstractions | More moving parts, often less ClickHouse-native, often heavier than needed |
+| PyClickHouseMigrator | Lightweight SQL-first ClickHouse migrations, baseline, checksums, dry-run, locking | No schema diff engine, no ORM layer, no GUI |
+
 ## Migration Format
 
 Migrations are `.sql` files discovered from the migrations directory. Canonical filename format:
@@ -244,6 +253,36 @@ Semantics:
 - `--dry-run` prints and optionally validates SQL, but writes nothing.
 - `baseline` writes ledger state, but executes no migration SQL.
 
+## Existing Database Baseline
+
+Use `baseline` when the schema already exists in ClickHouse and you want to start managing future changes with the migrator.
+
+Recommended flow:
+
+1. Create a migrations directory with SQL files that represent the schema state you want to treat as the starting point.
+2. Verify the target database already contains that schema.
+3. Run `baseline` once to stamp the ledger without executing any SQL.
+4. Add new migration files for later changes and use `up` from that point forward.
+
+Example:
+
+```sh
+export CLICKHOUSE_MIGRATE_URL=clickhouse://default@localhost:9000/mydb
+
+migrator init
+migrator new initial_schema
+# replace template with the SQL that describes the existing schema
+
+migrator baseline
+migrator show
+```
+
+Expected result:
+
+- existing objects in ClickHouse are left untouched
+- the SQL files are recorded in `db_migrations` as `baseline`
+- the next `migrator up` run applies only newer migration files
+
 ### `repair`
 
 Update stored checksums in `db_migrations` to match current migration files.
@@ -305,6 +344,126 @@ The image sets `CLICKHOUSE_MIGRATE_DIR=/migrations` by default.
 
 Pin to a major version tag (`:1`) or an exact version (`:1.1.0`).
 
+## Deployment Recipes
+
+### Docker Compose
+
+Example `compose.yaml`:
+
+```yaml
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    ports:
+      - "9000:9000"
+      - "8123:8123"
+    environment:
+      CLICKHOUSE_DB: mydb
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+
+  migrator:
+    image: maksimburtsev/py-clickhouse-migrator:1
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    volumes:
+      - ./db/migrations:/migrations:ro
+    environment:
+      CLICKHOUSE_MIGRATE_URL: clickhouse://default@clickhouse:9000/mydb
+    entrypoint: ["migrator"]
+```
+
+Run migrations:
+
+```sh
+docker compose run --rm migrator up
+```
+
+Baseline an existing database:
+
+```sh
+docker compose run --rm migrator baseline
+```
+
+### Kubernetes Job
+
+For production-style deployments, prefer a dedicated Job. It gives the cleanest execution model and avoids tying schema changes to application pod startup.
+
+```yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: clickhouse-migrate
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrator
+          image: maksimburtsev/py-clickhouse-migrator:1
+          args: ["up"]
+          env:
+            - name: CLICKHOUSE_MIGRATE_URL
+              value: clickhouse://default@clickhouse:9000/mydb
+          volumeMounts:
+            - name: migrations
+              mountPath: /migrations
+              readOnly: true
+      volumes:
+        - name: migrations
+          configMap:
+            name: app-migrations
+```
+
+Use a Job when you want one explicit migration step per deploy.
+
+### Kubernetes `initContainer`
+
+An `initContainer` works when application startup must be blocked until schema changes are applied, but it is less explicit than a separate Job.
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: my-app
+  template:
+    metadata:
+      labels:
+        app: my-app
+    spec:
+      initContainers:
+        - name: migrator
+          image: maksimburtsev/py-clickhouse-migrator:1
+          args: ["up"]
+          env:
+            - name: CLICKHOUSE_MIGRATE_URL
+              value: clickhouse://default@clickhouse:9000/mydb
+          volumeMounts:
+            - name: migrations
+              mountPath: /migrations
+              readOnly: true
+      containers:
+        - name: app
+          image: ghcr.io/example/my-app:latest
+      volumes:
+        - name: migrations
+          configMap:
+            name: app-migrations
+```
+
+Prefer a Job if you want clearer operational ownership or stricter control over retries and rollout order.
+
 ## Locking
 
 When multiple processes run `migrator up`, `rollback`, or `baseline` simultaneously, the advisory lock helps prevent conflicting writes. Locking is enabled by default on those commands.
@@ -360,6 +519,39 @@ Useful methods:
 - `show_migrations()`
 - `validate_checksums()`
 - `repair()`
+
+## Contributing
+
+Local setup:
+
+```sh
+uv sync --dev
+pre-commit install
+```
+
+Useful commands:
+
+```sh
+make lint
+make test
+make test-cluster
+```
+
+What they do:
+
+- `make lint` runs `ruff`, `ruff format --check`, and `mypy`
+- `make test` starts a local ClickHouse via `docker compose`, runs the default test suite, then tears it down
+- `make test-cluster` starts the 2-node ClickHouse cluster, waits for readiness, runs cluster tests, then tears it down
+
+The CI workflow runs:
+
+- lint
+- tests on Python `3.11`, `3.12`, `3.13`, `3.14`
+- cluster tests
+
+## Further Reading
+
+- [2.0 Migration Guide](docs/2.0-migration-guide.md)
 
 ## Known Limitations
 
