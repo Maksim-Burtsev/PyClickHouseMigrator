@@ -38,14 +38,16 @@
 - Cluster mode creates replicated service tables with `ON CLUSTER`
 - Legacy `.py` migrations are outside the supported workflow and are not discovered by the current runner
 
-## Planning Facts
+## Local Dev
 
-- As of April 2026, the project has no users and no compatibility commitments
-- The switch to `.sql` should not be treated as a breaking-change concern in planning
-- Do not repeatedly re-open that question unless new facts about real users appear
-- `_migrations_lock` cleanup is not a priority without evidence of a real operational problem
+- `uv sync --dev`
+- `pre-commit install`
+- `make lint`
+- `make test`
+- `make test-cluster`
 
 ## Docs
 
 - [README](https://raw.githubusercontent.com/Maksim-Burtsev/PyClickHouseMigrator/master/README.md)
 - [Changelog](https://raw.githubusercontent.com/Maksim-Burtsev/PyClickHouseMigrator/master/CHANGELOG.txt)
+- [2.0 Migration Guide](https://raw.githubusercontent.com/Maksim-Burtsev/PyClickHouseMigrator/master/docs/2.0-migration-guide.md)

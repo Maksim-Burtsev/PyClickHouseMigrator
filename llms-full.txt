@@ -11,13 +11,6 @@ Dependencies: `clickhouse-driver` and `click`.
 
 Current package version: `1.1.0`.
 
-## Planning Facts
-
-- As of April 2026, the project has no users and no compatibility commitments
-- The switch to `.sql` should not be treated as a breaking-change concern in planning
-- That question should not be re-opened in every new session unless new facts appear
-- `_migrations_lock` retention or cleanup is not a required task without evidence of a real operational issue
-
 ## Installation
 
 ```sh
@@ -434,6 +427,27 @@ Public exports from `py_clickhouse_migrator`:
 - all other commands need a working ClickHouse connection
 - `--quiet` suppresses logger noise, not explicit CLI output from `show`, `dry-run`, or `baseline`
 
+## Local Development
+
+Project setup:
+
+```sh
+uv sync --dev
+pre-commit install
+```
+
+Useful commands:
+
+```sh
+make lint
+make test
+make test-cluster
+```
+
+`make test` runs the default suite against a local ClickHouse instance from `docker-compose.test.yml`.
+
+`make test-cluster` runs the cluster-marked tests against `docker-compose.cluster.yml`.
+
 ## Limitations and Gotchas
 
 **Only `.sql` files are discovered.** Legacy `.py` migrations are outside the supported workflow and are not discovered by the current runner.
@@ -453,3 +467,4 @@ Public exports from `py_clickhouse_migrator`:
 - Python: 3.11, 3.12, 3.13, 3.14
 - Repository: https://github.com/Maksim-Burtsev/PyClickHouseMigrator
 - PyPI: https://pypi.org/project/py-clickhouse-migrator/
+- Migration guide: https://raw.githubusercontent.com/Maksim-Burtsev/PyClickHouseMigrator/master/docs/2.0-migration-guide.md
