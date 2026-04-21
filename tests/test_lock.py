@@ -147,6 +147,14 @@ def test_invalid_db_name(ch_client: Client) -> None:
         MigrationLock(client=ch_client, db="db; DROP TABLE x")
 
 
+@pytest.mark.parametrize("cluster", ["bad-name!", "123abc", "cluster; DROP TABLE x"])
+def test_invalid_cluster_name(cluster: str) -> None:
+    mock_client = MagicMock(spec=Client)
+
+    with pytest.raises(ValueError, match="Invalid cluster name"):
+        MigrationLock(client=mock_client, db=DB, cluster=cluster)
+
+
 def test_is_locked(lock: MigrationLock) -> None:
     assert not lock.is_locked()
 
