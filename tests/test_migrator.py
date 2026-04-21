@@ -317,6 +317,21 @@ def test_baseline_without_sql_files_returns_empty_result(
     assert ch_client.execute("SELECT count() FROM db_migrations")[0][0] == 0
 
 
+def test_baseline_raises_clear_error_when_migrations_dir_missing() -> None:
+    missing_dir = "./missing_migrations"
+
+    with (
+        patch("py_clickhouse_migrator.migrator.Client.from_url", return_value=MagicMock()),
+        patch.object(Migrator, "health_check"),
+        patch.object(Migrator, "check_migrations_table"),
+    ):
+        migrator = Migrator(database_url="clickhouse://default@localhost:9000/test", migrations_dir=missing_dir)
+
+    with patch.object(migrator, "get_applied_migrations_names", return_value=[]):
+        with pytest.raises(MigrationDirectoryNotFoundError, match="Run 'migrator init' first"):
+            migrator.baseline()
+
+
 def test_baseline_requires_empty_db_migrations(migrator: Migrator, migrator_init: None, ch_client: Client) -> None:
     filename = create_test_migration(
         name="baseline_guard",
