@@ -8,7 +8,7 @@ from click.testing import CliRunner
 from clickhouse_driver import Client
 
 from py_clickhouse_migrator.checksum import compute_checksum, normalize_content
-from py_clickhouse_migrator.errors import ChecksumMismatchError
+from py_clickhouse_migrator.errors import ChecksumMismatchError, InvalidMigrationError
 from py_clickhouse_migrator.migrator import (
     DEFAULT_MIGRATIONS_DIR,
     Migrator,
@@ -228,6 +228,28 @@ def test_validate_passes_when_no_changes(migrator: Migrator, migrator_init: None
 
     # clean
     ch_client.execute("DROP TABLE IF EXISTS test_ok")
+
+
+def test_validate_raises_for_invalid_applied_migration_file(
+    migrator: Migrator,
+    migrator_init: None,
+    ch_client: Client,
+) -> None:
+    filename = create_test_migration(
+        name="test_invalid_checksum_file",
+        up="CREATE TABLE IF NOT EXISTS test_invalid_checksum_file (id Int32) Engine=MergeTree() ORDER BY id;",
+        rollback="DROP TABLE IF EXISTS test_invalid_checksum_file",
+    )
+    migrator.up()
+
+    filepath = f"{DEFAULT_MIGRATIONS_DIR}/{filename}"
+    with open(filepath, "w", encoding="utf-8") as f:
+        f.write("-- migrator:up\nSELECT 1;\n-- migrator:down\n")
+
+    with pytest.raises(InvalidMigrationError, match=r"outside '-- @stmt' blocks"):
+        migrator.validate_checksums()
+
+    ch_client.execute("DROP TABLE IF EXISTS test_invalid_checksum_file")
 
 
 def test_validate_ignores_baselined_missing_file(migrator: Migrator, migrator_init: None) -> None:

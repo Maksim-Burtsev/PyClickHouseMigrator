@@ -21,6 +21,7 @@ from py_clickhouse_migrator.errors import (
 from py_clickhouse_migrator.migrator import (
     DEFAULT_MIGRATIONS_DIR,
     Migration,
+    MigrationKind,
     Migrator,
     create_migration_file,
     create_migrations_dir,
@@ -106,6 +107,12 @@ def test_create_new_migration_without_init() -> None:
     shutil.rmtree("./db", ignore_errors=True)
     with pytest.raises(MigrationDirectoryNotFoundError):
         create_migration_file(name="test")
+
+
+def test_migration_is_baseline_property() -> None:
+    migration = Migration(name="baseline.sql", up="", rollback="", kind=MigrationKind.BASELINE)
+
+    assert migration.is_baseline is True
 
 
 def test_apply_migration_one_query(migrator: Migrator, ch_client: Client) -> None:
@@ -678,6 +685,29 @@ def test_up_dry_run_with_number(migrator: Migrator, migrator_init: None, ch_clie
     assert len(migrator.get_unapplied_migration_names()) == 2
 
 
+def test_up_dry_run_multiple_separates_migrations_with_blank_line(
+    migrator: Migrator, migrator_init: None, capsys: pytest.CaptureFixture[str]
+) -> None:
+    filename_1 = create_test_migration(
+        name="dry_run_a",
+        up="CREATE TABLE IF NOT EXISTS dry_run_a (id Integer) Engine=MergeTree() ORDER BY id;",
+        rollback="DROP TABLE IF EXISTS dry_run_a",
+    )
+    filename_2 = create_test_migration(
+        name="dry_run_b",
+        up="CREATE TABLE IF NOT EXISTS dry_run_b (id Integer) Engine=MergeTree() ORDER BY id;",
+        rollback="DROP TABLE IF EXISTS dry_run_b",
+    )
+
+    migrator.up(dry_run=True)
+
+    plain = click.unstyle(capsys.readouterr().out)
+    assert (
+        f"CREATE TABLE IF NOT EXISTS dry_run_a (id Integer) Engine=MergeTree() ORDER BY id;\n\n-- {filename_2} (up)"
+    ) in plain
+    assert f"-- {filename_1} (up)" in plain
+
+
 def test_rollback_dry_run_does_not_rollback(
     migrator: Migrator, test_table_from_migration: str, ch_client: Client
 ) -> None:
@@ -706,6 +736,11 @@ def test_rollback_dry_run_multiple(
     assert table_exists(ch_client, "test_table_1")
     assert table_exists(ch_client, "test_table_2")
     assert table_exists(ch_client, "test_table_3")
+
+
+def test_validate_statements_wraps_clickhouse_error(migrator: Migrator) -> None:
+    with pytest.raises(InvalidStatementError, match="ClickHouse error"):
+        migrator.validate_statements(["SELECT FROM system.tables"])
 
 
 def test_up_validation_failure_does_not_execute_queries(
