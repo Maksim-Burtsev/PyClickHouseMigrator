@@ -16,6 +16,7 @@ from clickhouse_driver import Client
 logger = logging.getLogger("py_clickhouse_migrator")
 
 _DB_NAME_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+_CLUSTER_NAME_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 
 ClickHouseSettings = dict[str, str | int]
 
@@ -84,6 +85,8 @@ class MigrationLock:
     ) -> None:
         if not _DB_NAME_RE.match(db):
             raise ValueError(f"Invalid database name: {db!r}")
+        if cluster and not _CLUSTER_NAME_RE.match(cluster):
+            raise ValueError(f"Invalid cluster name: {cluster!r}")
         self._client = client
         self._db = db
         self._ttl = ttl
