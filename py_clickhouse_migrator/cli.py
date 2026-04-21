@@ -97,9 +97,6 @@ def up(
         migrator.up(n=number, dry_run=True, allow_dirty=allow_dirty, validate=validate)
         return
     if lock:
-        if not migrator.get_unapplied_migration_names():
-            logger.info("No pending migrations, skipping lock.")
-            return
         with MigrationLock(
             client=migrator.ch_client, db=migrator.get_db_name(), ttl=lock_ttl, retry_count=lock_retry, cluster=cluster
         ):
