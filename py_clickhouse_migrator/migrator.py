@@ -339,16 +339,26 @@ class Migrator(object):
 
         return result
 
+    def _get_sql_migration_filenames(self) -> list[str]:
+        try:
+            return sorted(file for file in os.listdir(self.migrations_dir) if file.endswith(".sql"))
+        except FileNotFoundError:
+            raise MigrationDirectoryNotFoundError(
+                f"Migration directory {self.migrations_dir} not found.\n"
+                "Run 'migrator init' first or specify a migrations directory with the --path flag or "
+                "the CLICKHOUSE_MIGRATE_DIR environment variable."
+            ) from None
+
     def baseline(self) -> list[str]:
         if self.get_applied_migrations_names():
             raise BaselineError("Baseline requires an empty db_migrations table.")
-        filenames = sorted(file for file in os.listdir(self.migrations_dir) if file.endswith(".sql"))
+        filenames = self._get_sql_migration_filenames()
         if filenames:
             self.save_baselined_migrations(filenames)
         return filenames
 
     def get_unapplied_migration_names(self) -> list[str]:
-        filenames: list[str] = [file for file in os.listdir(self.migrations_dir) if file.endswith(".sql")]
+        filenames = self._get_sql_migration_filenames()
         applied_migrations: list[str] = self.get_applied_migrations_names()
         return sorted(list(set(filenames) - set(applied_migrations)))
 
