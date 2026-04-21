@@ -52,6 +52,13 @@ def test_read_migration_file_raises_for_missing_file(tmp_path: Path) -> None:
         _load_migration_lines(str(filepath))
 
 
+def test_load_migration_sections_wraps_missing_file_as_parse_error(tmp_path: Path) -> None:
+    filepath = tmp_path / "missing.sql"
+
+    with pytest.raises(MigrationParseError, match="Cannot load migration"):
+        load_migration_sections(str(filepath))
+
+
 def test_find_marker_indexes_matches_stripped_marker_lines() -> None:
     lines = [
         "  -- migrator:up  ",
