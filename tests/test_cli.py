@@ -179,8 +179,7 @@ def test_cli_up_no_lock(runner: CliRunner, mock_migrator: MagicMock) -> None:
     mock_migrator.up.assert_called_once_with(n=None, allow_dirty=False, validate=True)
 
 
-def test_cli_up_with_lock_and_pending(runner: CliRunner, mock_migrator: MagicMock) -> None:
-    mock_migrator.get_unapplied_migration_names.return_value = ["001.sql"]
+def test_cli_up_with_lock(runner: CliRunner, mock_migrator: MagicMock) -> None:
     mock_migrator.get_db_name.return_value = "test"
     mock_migrator.ch_client = MagicMock()
 
@@ -198,13 +197,42 @@ def test_cli_up_with_lock_and_pending(runner: CliRunner, mock_migrator: MagicMoc
     mock_migrator.up.assert_called_once_with(n=None, allow_dirty=False, validate=True)
 
 
-def test_cli_up_no_pending_skips_lock(runner: CliRunner, mock_migrator: MagicMock) -> None:
-    mock_migrator.get_unapplied_migration_names.return_value = []
+def test_cli_up_no_pending_still_uses_lock(runner: CliRunner, mock_migrator: MagicMock) -> None:
+    mock_migrator.get_db_name.return_value = "test"
+    mock_migrator.ch_client = MagicMock()
+
     with patch("py_clickhouse_migrator.cli.MigrationLock") as mock_lock_cls:
+        mock_lock_instance = MagicMock()
+        mock_lock_cls.return_value = mock_lock_instance
+        mock_lock_instance.__enter__ = MagicMock(return_value=mock_lock_instance)
+        mock_lock_instance.__exit__ = MagicMock(return_value=False)
+
         result = runner.invoke(main, ["--url", FAKE_URL, "up"])
+
     assert result.exit_code == 0
-    mock_lock_cls.assert_not_called()
-    mock_migrator.up.assert_not_called()
+    mock_lock_cls.assert_called_once()
+    mock_lock_instance.__enter__.assert_called_once()
+    mock_migrator.up.assert_called_once_with(n=None, allow_dirty=False, validate=True)
+
+
+def test_cli_up_fails_on_checksum_mismatch_even_without_pending(runner: CliRunner, mock_migrator: MagicMock) -> None:
+    mock_migrator.get_db_name.return_value = "test"
+    mock_migrator.ch_client = MagicMock()
+    mock_migrator.up.side_effect = ChecksumMismatchError("Checksum mismatch: 001.sql")
+
+    with patch("py_clickhouse_migrator.cli.MigrationLock") as mock_lock_cls:
+        mock_lock_instance = MagicMock()
+        mock_lock_cls.return_value = mock_lock_instance
+        mock_lock_instance.__enter__ = MagicMock(return_value=mock_lock_instance)
+        mock_lock_instance.__exit__ = MagicMock(return_value=False)
+
+        result = runner.invoke(main, ["--url", FAKE_URL, "up"])
+
+    assert result.exit_code == 1
+    assert "Checksum mismatch: 001.sql" in result.stderr
+    mock_lock_cls.assert_called_once()
+    mock_lock_instance.__enter__.assert_called_once()
+    mock_migrator.up.assert_called_once_with(n=None, allow_dirty=False, validate=True)
 
 
 def test_cli_up_with_number(runner: CliRunner, mock_migrator: MagicMock) -> None:
