@@ -1,0 +1,26 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: clickhouse-migrations
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrator
+          image: maksimburtsev/py-clickhouse-migrator:2
+          args: ["up"]
+          env:
+            - name: CLICKHOUSE_MIGRATE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: clickhouse-migrations
+                  key: url
+          volumeMounts:
+            - name: migrations
+              mountPath: /migrations
+      volumes:
+        - name: migrations
+          configMap:
+            name: clickhouse-migrations

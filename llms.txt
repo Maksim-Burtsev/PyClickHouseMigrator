@@ -1,29 +1,87 @@
 # PyClickHouseMigrator
 
-> Lightweight, ORM-free Python CLI for ClickHouse schema migrations.
-> Advisory locking for concurrent execution protection.
-> Supports single-node and cluster (ON CLUSTER) modes with replicated service tables.
+> SQL-first ClickHouse migration runner for Python teams. Plain `.sql` migrations, explicit `-- @stmt` blocks, rollback SQL, checksum validation, dry-run, baseline, advisory locking, and cluster-aware service tables. No ORM, no schema diff engine, no deployment platform.
 
-- Python 3.11+, depends only on `clickhouse-driver` and `click`
-- Not an ORM, not a framework — just a migration runner
-- Migrations are `.py` files with `up()` and `rollback()` functions returning SQL strings
-- CLI entry point: `migrator` (PyPI package: `py-clickhouse-migrator`)
-- Version: 1.0.0
+## Essentials
+
+- Package: `py-clickhouse-migrator`
+- CLI: `migrator`
+- Python: 3.11+
+- Dependencies: `click`, `clickhouse-driver`
 - License: MIT
+- Repository: https://github.com/Maksim-Burtsev/PyClickHouseMigrator
+- Default migrations directory: `./db/migrations`
+- Default Docker migrations directory: `/migrations`
+
+## Migration format
+
+Migrations are `.sql` files:
+
+```sql
+-- migrator:up
+-- @stmt
+CREATE TABLE IF NOT EXISTS users
+(
+    id UInt64,
+    name String
+)
+ENGINE = MergeTree
+ORDER BY id
+
+-- migrator:down
+-- @stmt
+DROP TABLE IF EXISTS users
+```
+
+Rules:
+
+- exactly one `-- migrator:up` and one `-- migrator:down` section;
+- `-- migrator:up` must come before `-- migrator:down`;
+- SQL must be inside `-- @stmt` blocks;
+- `up` must contain at least one non-empty block;
+- `down` may be empty;
+- each `-- @stmt` block is executed as one ClickHouse query;
+- the migrator does not split SQL by semicolon.
+
+## Commands
+
+- `migrator init` — create migrations directory; offline.
+- `migrator new [name]` — create timestamped `.sql` migration; offline.
+- `migrator up [N]` — apply pending migrations.
+- `migrator up --dry-run` — print pending SQL without executing.
+- `migrator rollback [N]` — rollback applied migrations in reverse order.
+- `migrator show [--all]` — display applied/pending migrations and integrity markers.
+- `migrator baseline` — record existing `.sql` files as baseline rows without executing SQL.
+- `migrator repair` — update stored checksums to match current files.
+- `migrator lock-info` — show active lock.
+- `migrator force-unlock` — manually release stuck lock.
+
+## Configuration
+
+Global options and env vars:
+
+- `--url` / `CLICKHOUSE_MIGRATE_URL` — ClickHouse URL, required for DB commands.
+- `--path` / `CLICKHOUSE_MIGRATE_DIR` — migrations directory, default `./db/migrations`.
+- `--cluster` / `CLICKHOUSE_MIGRATE_CLUSTER` — cluster name for migrator service tables.
+- `--connect-retries` / `CLICKHOUSE_MIGRATE_CONNECT_RETRIES` — startup connection retries.
+- `--connect-retries-interval` / `CLICKHOUSE_MIGRATE_CONNECT_RETRIES_INTERVAL` — seconds between retries.
+- `--send-receive-timeout` / `CLICKHOUSE_MIGRATE_SEND_RECEIVE_TIMEOUT` — ClickHouse client timeout.
+- `-v`, `--verbose` — debug output.
+- `-q`, `--quiet` — errors only.
+
+## Boundaries
+
+PyClickHouseMigrator executes migration SQL as written. It does not generate schema diffs, create rollback SQL, create the target database, sandbox SQL, inject `ON CLUSTER`, or orchestrate deployments.
 
 ## Docs
 
-- [README](https://raw.githubusercontent.com/Maksim-Burtsev/PyClickHouseMigrator/master/README.md): Installation, quick start, CLI reference, configuration, cluster support, limitations
-- [Changelog](https://raw.githubusercontent.com/Maksim-Burtsev/PyClickHouseMigrator/master/CHANGELOG.txt): Version history
-
-## Source
-
-- [cli.py](https://raw.githubusercontent.com/Maksim-Burtsev/PyClickHouseMigrator/master/py_clickhouse_migrator/cli.py): Click CLI — commands: init, new, up, rollback, show, repair, force-unlock, lock-info
-- [migrator.py](https://raw.githubusercontent.com/Maksim-Burtsev/PyClickHouseMigrator/master/py_clickhouse_migrator/migrator.py): Core migration logic — apply, rollback, checksum validation, status display
-- [lock.py](https://raw.githubusercontent.com/Maksim-Burtsev/PyClickHouseMigrator/master/py_clickhouse_migrator/lock.py): Advisory lock using ReplacingMergeTree with TTL and retry
-- [__init__.py](https://raw.githubusercontent.com/Maksim-Burtsev/PyClickHouseMigrator/master/py_clickhouse_migrator/__init__.py): Public API exports (Migrator, MigrationLock, exceptions, helpers)
-- [pyproject.toml](https://raw.githubusercontent.com/Maksim-Burtsev/PyClickHouseMigrator/master/pyproject.toml): Project metadata, dependencies, tool config
-
-## Optional
-
-- [License](https://raw.githubusercontent.com/Maksim-Burtsev/PyClickHouseMigrator/master/LICENCE.txt): MIT License
+- README: https://raw.githubusercontent.com/Maksim-Burtsev/PyClickHouseMigrator/master/README.md
+- Migration format: https://raw.githubusercontent.com/Maksim-Burtsev/PyClickHouseMigrator/master/docs/migration-format.md
+- Baseline: https://raw.githubusercontent.com/Maksim-Burtsev/PyClickHouseMigrator/master/docs/baseline.md
+- Cluster mode: https://raw.githubusercontent.com/Maksim-Burtsev/PyClickHouseMigrator/master/docs/cluster-mode.md
+- CI/CD: https://raw.githubusercontent.com/Maksim-Burtsev/PyClickHouseMigrator/master/docs/ci-cd.md
+- Docker: https://raw.githubusercontent.com/Maksim-Burtsev/PyClickHouseMigrator/master/docs/docker.md
+- Python API: https://raw.githubusercontent.com/Maksim-Burtsev/PyClickHouseMigrator/master/docs/python-api.md
+- Troubleshooting: https://raw.githubusercontent.com/Maksim-Burtsev/PyClickHouseMigrator/master/docs/troubleshooting.md
+- Known limitations: https://raw.githubusercontent.com/Maksim-Burtsev/PyClickHouseMigrator/master/docs/known-limitations.md
+- Changelog: https://raw.githubusercontent.com/Maksim-Burtsev/PyClickHouseMigrator/master/CHANGELOG.txt
