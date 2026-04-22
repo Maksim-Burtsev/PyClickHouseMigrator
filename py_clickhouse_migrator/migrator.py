@@ -237,7 +237,7 @@ class Migrator(object):
         )
         raise ChecksumMismatchError(
             f"Checksum mismatch for applied migrations:\n{details}\n\n"
-            "Run 'py-clickhouse-migrator repair' to update checksums, or use --allow-dirty to skip this check."
+            "Run 'migrator repair' to update checksums, or use --allow-dirty to skip this check."
         )
 
     def up(self, n: int | None = None, dry_run: bool = False, allow_dirty: bool = False, validate: bool = True) -> None:
