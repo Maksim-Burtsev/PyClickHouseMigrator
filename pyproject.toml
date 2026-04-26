@@ -42,6 +42,7 @@ migrator = "py_clickhouse_migrator.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/Maksim-Burtsev/PyClickHouseMigrator"
+Documentation = "https://maksim-burtsev.github.io/PyClickHouseMigrator/"
 Repository = "https://github.com/Maksim-Burtsev/PyClickHouseMigrator"
 Issues = "https://github.com/Maksim-Burtsev/PyClickHouseMigrator/issues"
 Changelog = "https://github.com/Maksim-Burtsev/PyClickHouseMigrator/releases"
@@ -54,6 +55,9 @@ dev = [
     "ruff>=0.15",
     "pre-commit>=4.0",
     "mypy>=1.19.1",
+]
+docs = [
+    "mkdocs-material>=9.6,<10",
 ]
 
 [build-system]
