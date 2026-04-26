@@ -8,9 +8,8 @@ Change log
 - Removed the old documented Python migration workflow from user-facing documentation
 - No blind SQL splitting by semicolon: each `-- @stmt` block is executed as one ClickHouse query
 - Added baseline workflow for adopting existing databases without executing historical migrations
-- Rollback uses stored `down` SQL from `db_migrations`
 - Checksum validation is based on parsed statement blocks
-- Preflight validation with `EXPLAIN AST` for `up`, `rollback`, and dry-run flows, with `--no-validate` escape hatch
+- Added preflight validation with `EXPLAIN AST` before `up` and `rollback`; dry-run uses the same validation path and can opt out with `--no-validate`
 - Improved migration status output with HEAD, baseline, modified, and missing markers
 - Improved missing migrations directory handling
 - Hardened lock cluster name validation
