@@ -2,12 +2,12 @@
 
 `baseline` is for adopting an existing ClickHouse database.
 
-Use it when the database already contains schema objects, and you want PyClickHouseMigrator to start tracking future migrations without replaying historical DDL.
+Use it when the database already contains schema objects and you have `.sql` migration files that represent that existing schema. Baseline marks those files as already applied so future `migrator up` runs only execute new migrations.
 
 ## Typical workflow
 
-1. Write `.sql` migration files that represent the existing schema.
-2. Put them in the migrations directory.
+1. Write or collect `.sql` migration files that represent the existing schema.
+2. Point the migrator at that directory with `--path` or `CLICKHOUSE_MIGRATE_DIR`, or put the files in the default `./db/migrations` directory.
 3. Run `migrator baseline` once.
 4. Add new migration files normally.
 5. Run `migrator up` for future changes.
@@ -36,9 +36,9 @@ Only the new pending migration is executed.
 
 `migrator baseline`:
 
-- creates the `db_migrations` service table if needed;
-- requires that `db_migrations` is empty;
-- records current `.sql` migration files as `baseline` rows;
+- creates the `db_migrations` service table if it does not exist;
+- requires `db_migrations` to have no rows;
+- marks all current `.sql` files in the migrations directory as already applied (`baseline` rows);
 - preserves migration ordering by filename;
 - does not execute SQL;
 - does not validate SQL;
@@ -99,7 +99,7 @@ Why: baseline files are treated as historical reference points, not executed mig
 
 ## Safety notes
 
-Baseline requires an empty `db_migrations` table. If the table already contains rows, the command fails.
+Baseline creates the `db_migrations` table if needed. If the table already contains rows, the command fails.
 
 This is intentional. Baseline should be a one-time adoption step, not a way to mix arbitrary historical rows into an existing migration history.
 

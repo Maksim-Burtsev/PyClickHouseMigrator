@@ -129,7 +129,7 @@ print(repaired)
 names = migrator.baseline()
 ```
 
-This records existing `.sql` files as baseline rows without executing them. It requires an empty `db_migrations` table.
+This marks existing `.sql` files as already applied (`baseline` rows) without executing them. It creates `db_migrations` if needed, but the table must have no rows.
 
 ## MigrationLock
 

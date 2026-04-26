@@ -222,25 +222,25 @@ Shows applied migrations, pending migrations, total counts, HEAD marker, baselin
 
 ### `baseline`
 
-Records current `.sql` migration files as already applied without executing SQL.
+Adopts an existing DB by marking current `.sql` migration files as already applied without executing SQL.
 
 ```sh
 migrator baseline
 ```
 
-Baseline requires an empty `db_migrations` table. It writes rows with `kind = 'baseline'`, empty `up` and `rollback` columns, and empty checksums. Baseline rows are excluded from rollback and checksum validation.
+Baseline creates `db_migrations` if needed, but the table must have no rows. It writes rows with `kind = 'baseline'`, empty `up` and `rollback` columns, and empty checksums. Baseline rows are excluded from rollback and checksum validation.
 
 Baseline does not validate SQL and does not compare files with the existing ClickHouse schema.
 
 ### `repair`
 
-Updates stored checksums for applied migrations whose current files exist and whose checksums differ.
+Accepts intentional edit(s) to applied migration file(s) by updating stored checksums.
 
 ```sh
 migrator repair
 ```
 
-It does not execute migration SQL. Missing files are reported and skipped.
+Use only after confirming that the database state is still consistent with the edited file(s). It does not execute migration SQL. Missing files are reported and skipped.
 
 ### `lock-info`
 
@@ -317,7 +317,7 @@ Lock ownership is verified after insert by reading the latest active row with `F
 
 ## Checksum behavior
 
-Checksums are computed from parsed `up` and `down` statement lists.
+Checksums are computed from the `up` and `down` statement blocks extracted by the migrator.
 
 Normalization strips trailing whitespace, removes blank lines, joins lines with `\n`, serializes statements with null-byte separators, and computes SHA-256.
 
@@ -367,7 +367,7 @@ Cluster names must match:
 Docker image:
 
 ```text
-maksimburtsev/py-clickhouse-migrator:2
+maksimburtsev/py-clickhouse-migrator:latest
 ```
 
 Run migrations:
@@ -376,7 +376,7 @@ Run migrations:
 docker run --rm \
   -v "$PWD/db/migrations:/migrations" \
   -e CLICKHOUSE_MIGRATE_URL=clickhouse://default@clickhouse:9000/mydb \
-  maksimburtsev/py-clickhouse-migrator:2 \
+  maksimburtsev/py-clickhouse-migrator:latest \
   up
 ```
 

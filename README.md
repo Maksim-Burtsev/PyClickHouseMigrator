@@ -307,18 +307,19 @@ Possible applied migration markers:
 
 ### `baseline`
 
-Record existing `.sql` migration files as already applied without executing them.
+Adopt an existing ClickHouse database without replaying historical DDL.
 
 ```sh
 migrator baseline
 ```
 
-Use this when you introduce the migrator to an existing ClickHouse database whose schema already exists.
+Use this when your database schema already exists and you have `.sql` migration files that represent that existing schema. Point the migrator at that directory with `--path` or `CLICKHOUSE_MIGRATE_DIR`, or put the files in the default `./db/migrations` directory. Then run `migrator baseline` once and use `migrator up` for future migrations.
 
 Baseline behavior:
 
-- requires an empty `db_migrations` table;
-- records current `.sql` files as `baseline` rows;
+- creates the `db_migrations` service table if it does not exist;
+- requires `db_migrations` to have no rows;
+- marks all current `.sql` files in the migrations directory as already applied (`baseline` rows);
 - does not execute SQL;
 - does not validate that the ClickHouse schema matches the files;
 - baseline rows are not selected by `rollback`;
@@ -334,7 +335,7 @@ Update stored checksums to match current migration files.
 migrator repair
 ```
 
-Use only after intentionally editing an already-applied migration file. `repair` does not execute SQL and does not modify your application schema. Missing files are reported and skipped.
+Use this only after intentionally editing already-applied migration file(s) and confirming that the database state is still consistent with those edits. `migrator show` and `migrator up` report that applied migration SQL changed; `repair` updates the stored checksum to accept the current file content in future checks. It does not execute SQL, does not modify your application schema, and skips missing files.
 
 ### `lock-info`
 
@@ -392,7 +393,7 @@ clickhouse://user:password@host:9440/database?secure=True
 ## Docker
 
 ```sh
-docker pull maksimburtsev/py-clickhouse-migrator:2
+docker pull maksimburtsev/py-clickhouse-migrator:latest
 ```
 
 Run migrations:
@@ -401,23 +402,11 @@ Run migrations:
 docker run --rm \
   -v "$PWD/db/migrations:/migrations" \
   -e CLICKHOUSE_MIGRATE_URL=clickhouse://default@clickhouse:9000/mydb \
-  maksimburtsev/py-clickhouse-migrator:2 \
+  maksimburtsev/py-clickhouse-migrator:latest \
   up
 ```
 
 Inside the Docker image, the default migrations directory is `/migrations`.
-
-Pin to a major version tag for stable automation:
-
-```text
-maksimburtsev/py-clickhouse-migrator:2
-```
-
-Or pin to an exact release:
-
-```text
-maksimburtsev/py-clickhouse-migrator:2.0.0
-```
 
 See [Docker usage](docs/docker.md).
 
@@ -452,7 +441,7 @@ See [CI/CD usage](docs/ci-cd.md).
 
 When a migration is applied, PyClickHouseMigrator stores a SHA-256 checksum in `db_migrations`.
 
-The checksum is computed from the parsed `up` and `down` statement blocks, not from raw file bytes. This makes the checksum tied to the migration SQL that the tool actually understands and executes.
+The checksum is computed from the `up` and `down` statement blocks extracted by the migrator, not from the migration file as a whole. This makes the checksum tied to the SQL blocks the tool will send to ClickHouse.
 
 On `migrator up`, applied migration checksums are compared with the current local files. If an applied migration was modified or deleted, the command fails unless `--allow-dirty` is used.
 

@@ -5,10 +5,10 @@ PyClickHouseMigrator can run as a containerized CLI.
 ## Pull image
 
 ```sh
-docker pull maksimburtsev/py-clickhouse-migrator:2
+docker pull maksimburtsev/py-clickhouse-migrator:latest
 ```
 
-Use the major version tag for stable automation:
+Use `latest` for a quick start. For repeatable automation, pin to a major version tag:
 
 ```text
 maksimburtsev/py-clickhouse-migrator:2
@@ -28,7 +28,7 @@ Mount your migrations directory to `/migrations`:
 docker run --rm \
   -v "$PWD/db/migrations:/migrations" \
   -e CLICKHOUSE_MIGRATE_URL=clickhouse://default@clickhouse:9000/mydb \
-  maksimburtsev/py-clickhouse-migrator:2 \
+  maksimburtsev/py-clickhouse-migrator:latest \
   up
 ```
 
@@ -46,7 +46,7 @@ So you do not need to pass `--path /migrations` unless you want to override it.
 docker run --rm \
   -v "$PWD/db/migrations:/migrations" \
   -e CLICKHOUSE_MIGRATE_URL=clickhouse://default@clickhouse:9000/mydb \
-  maksimburtsev/py-clickhouse-migrator:2 \
+  maksimburtsev/py-clickhouse-migrator:latest \
   up --dry-run
 ```
 
@@ -58,7 +58,7 @@ docker run --rm \
 docker run --rm \
   -v "$PWD:/workspace" \
   -w /workspace \
-  maksimburtsev/py-clickhouse-migrator:2 \
+  maksimburtsev/py-clickhouse-migrator:latest \
   --path ./db/migrations init
 ```
 
@@ -68,7 +68,7 @@ docker run --rm \
 docker run --rm \
   -v "$PWD:/workspace" \
   -w /workspace \
-  maksimburtsev/py-clickhouse-migrator:2 \
+  maksimburtsev/py-clickhouse-migrator:latest \
   --path ./db/migrations new create_users_table
 ```
 
@@ -83,7 +83,7 @@ services:
       - "8123:8123"
 
   migrations:
-    image: maksimburtsev/py-clickhouse-migrator:2
+    image: maksimburtsev/py-clickhouse-migrator:latest
     depends_on:
       - clickhouse
     environment:
@@ -102,7 +102,7 @@ docker run --rm \
   -v "$PWD/db/migrations:/migrations" \
   -e CLICKHOUSE_MIGRATE_URL=clickhouse://default@clickhouse:9000/mydb \
   -e CLICKHOUSE_MIGRATE_CLUSTER=my_cluster \
-  maksimburtsev/py-clickhouse-migrator:2 \
+  maksimburtsev/py-clickhouse-migrator:latest \
   up
 ```
 

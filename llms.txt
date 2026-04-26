@@ -51,8 +51,8 @@ Rules:
 - `migrator up --dry-run` — print pending SQL without executing.
 - `migrator rollback [N]` — rollback applied migrations in reverse order.
 - `migrator show [--all]` — display applied/pending migrations and integrity markers.
-- `migrator baseline` — record existing `.sql` files as baseline rows without executing SQL.
-- `migrator repair` — update stored checksums to match current files.
+- `migrator baseline` — adopt an existing DB by marking current `.sql` files as already applied without executing SQL.
+- `migrator repair` — accept intentional edit(s) to applied migration file(s) by updating stored checksums.
 - `migrator lock-info` — show active lock.
 - `migrator force-unlock` — manually release stuck lock.
 

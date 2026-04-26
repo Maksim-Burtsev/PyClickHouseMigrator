@@ -97,7 +97,7 @@ Disabling validation does not make execution safer. It only skips the preflight 
 
 ## Checksum mismatch
 
-This means an already-applied migration file changed or is missing locally.
+This means already-applied migration file(s) changed or are missing locally.
 
 Check status:
 
@@ -107,7 +107,7 @@ migrator show
 
 If the edit was accidental, restore the original file from Git.
 
-If the edit was intentional and you only want to update migration metadata:
+If the edit was intentional, the database state is still consistent, and you only want to accept the current file content for future checksum checks:
 
 ```sh
 migrator repair
@@ -172,7 +172,7 @@ Recommended recovery flow:
 1. Inspect ClickHouse state manually.
 2. Decide whether to complete the migration manually, revert it manually, or edit the migration to be safely re-runnable.
 3. Re-run `migrator up` when the migration file and database state are consistent.
-4. Use `migrator repair` only if you intentionally changed an already-applied migration file and need to update stored checksums.
+4. Use `migrator repair` only if you intentionally changed already-applied migration file(s) and need to update stored checksums.
 
 Use `IF EXISTS` and `IF NOT EXISTS` in migration SQL where appropriate to make recovery easier.
 
@@ -198,7 +198,7 @@ Mount your migrations directory to `/migrations`:
 docker run --rm \
   -v "$PWD/db/migrations:/migrations" \
   -e CLICKHOUSE_MIGRATE_URL=clickhouse://default@clickhouse:9000/mydb \
-  maksimburtsev/py-clickhouse-migrator:2 \
+  maksimburtsev/py-clickhouse-migrator:latest \
   up
 ```
 

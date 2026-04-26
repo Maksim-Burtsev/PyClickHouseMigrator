@@ -181,9 +181,9 @@ migrator rollback --no-validate
 
 ## Checksum behavior
 
-The checksum stored in `db_migrations` is computed from parsed `up` and `down` statement blocks.
+The checksum stored in `db_migrations` is computed from the `up` and `down` statement blocks extracted by the migrator.
 
-This means the checksum reflects the SQL blocks the migrator understands and executes, not arbitrary raw file bytes.
+This means the checksum reflects the SQL blocks the tool will send to ClickHouse, not the migration file as a whole.
 
 If an applied migration file changes, `migrator up` fails by default:
 
@@ -192,4 +192,4 @@ migrator show
 migrator repair
 ```
 
-Use `repair` only after intentionally changing already-applied migration files.
+Use `repair` only after intentionally changing already-applied migration files and confirming that the database state is still consistent with those changes.
