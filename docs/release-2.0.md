@@ -143,9 +143,7 @@ PyClickHouseMigrator 2.0 intentionally does not:
 
 The product is a migration runner. It applies, tracks, validates, rolls back, and reports migration state.
 
-## Recommended upgrade checklist
-
-Before publishing or adopting 2.0:
+## Adoption checklist
 
 ```text
 [ ] Ensure migration files use .sql extension.
