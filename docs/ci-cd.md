@@ -31,7 +31,7 @@ name: Run ClickHouse migrations
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [master]
 
 jobs:
   migrate:
@@ -41,7 +41,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: '3.14'
 
       - name: Install migrator
         run: pip install py-clickhouse-migrator
