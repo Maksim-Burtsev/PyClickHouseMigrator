@@ -32,6 +32,9 @@ theme:
 plugins:
   - search
 
+extra_css:
+  - stylesheets/extra.css
+
 markdown_extensions:
   - admonition
   - attr_list
@@ -50,15 +53,16 @@ exclude_docs: |
   README.md
 
 nav:
-  - Home: index.md
-  - Guides:
+  - Overview: index.md
+  - Core:
       - Migration format: migration-format.md
       - Baseline existing databases: baseline.md
       - Cluster mode: cluster-mode.md
+  - Deployment:
       - CI/CD usage: ci-cd.md
       - Docker usage: docker.md
+  - Reference:
       - Python API: python-api.md
       - Troubleshooting: troubleshooting.md
       - Known limitations: known-limitations.md
-  - Release notes:
-      - Version 2.0: release-2.0.md
+      - Release 2.0: release-2.0.md
