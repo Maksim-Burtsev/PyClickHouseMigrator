@@ -503,21 +503,6 @@ migrator.up()
 
 See [Python API](docs/python-api.md).
 
-## What PyClickHouseMigrator does not do
-
-PyClickHouseMigrator is intentionally narrow. It does not:
-
-- generate schema diffs;
-- inspect your database and produce migrations;
-- rewrite or approve your SQL;
-- generate rollback statements;
-- inject `ON CLUSTER` into user migrations;
-- create the target database;
-- provide a web UI, RBAC, approvals, or deployment orchestration;
-- sandbox migration SQL.
-
-Migration files are trusted input. The tool executes them as written.
-
 ## Known limitations
 
 - ClickHouse DDL is not transactional. A multi-statement migration can partially apply if a later statement fails.
