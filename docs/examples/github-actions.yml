@@ -1,0 +1,24 @@
+name: ClickHouse migrations
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: Install PyClickHouseMigrator
+        run: pip install "py-clickhouse-migrator>=2,<3"
+
+      - name: Run migrations
+        run: migrator up
+        env:
+          CLICKHOUSE_MIGRATE_URL: ${{ secrets.CLICKHOUSE_MIGRATE_URL }}

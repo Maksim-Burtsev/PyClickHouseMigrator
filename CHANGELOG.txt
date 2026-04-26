@@ -1,8 +1,23 @@
 Change log
 ==========
 
+2.0.0 (26/04/2026)
+-------------------
+
+- SQL-first migration format: migrations are `.sql` files with `-- migrator:up`, `-- migrator:down`, and explicit `-- @stmt` blocks
+- Removed the old documented Python migration workflow from user-facing documentation
+- No blind SQL splitting by semicolon: each `-- @stmt` block is executed as one ClickHouse query
+- Added baseline workflow for adopting existing databases without executing historical migrations
+- Checksum validation is based on parsed statement blocks
+- Added preflight validation with `EXPLAIN AST` before `up` and `rollback`; dry-run uses the same validation path and can opt out with `--no-validate`
+- Improved migration status output with HEAD, baseline, modified, and missing markers
+- Improved missing migrations directory handling
+- Hardened lock cluster name validation
+- Full documentation refresh for README, llms.txt, llms-full.txt, and docs/*
+
 1.1.0 (30/03/2026)
 -------------------
+
 - New --send-receive-timeout option
 - Docker image (Docker Hub)
 - llms.txt / llms-full.txt
@@ -12,6 +27,7 @@ Change log
 
 1.0.0 (22/03/2026)
 -------------------
+
 - Distributed locking with TTL
 - Checksum validation & repair
 - Cluster support (ON CLUSTER)
@@ -23,12 +39,15 @@ Change log
 
 0.3 (19/03/2024)
 ------------------
+
 - Fix queries parsing
 
 0.2 (26/12/2023)
 ------------------
+
 - Add .env loading
 
 0.1 (24/12/2023)
 ------------------
+
 - First release
