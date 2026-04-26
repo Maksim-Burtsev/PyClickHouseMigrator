@@ -375,7 +375,7 @@ Global options can be provided through CLI flags or environment variables.
 | `--connect-retries-interval` | `CLICKHOUSE_MIGRATE_CONNECT_RETRIES_INTERVAL` | `1` | Seconds between connection retries. |
 | `--send-receive-timeout` | `CLICKHOUSE_MIGRATE_SEND_RECEIVE_TIMEOUT` | `600` | ClickHouse client send/receive timeout in seconds. |
 | `-v`, `--verbose` | — | off | Enable DEBUG logging. |
-| `-q`, `--quiet` | — | off | Suppress all output except errors. |
+| `-q`, `--quiet` | — | off | Suppress INFO/WARNING logs; command output such as dry-run SQL is still printed. |
 
 Connection URL example:
 

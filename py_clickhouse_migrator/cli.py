@@ -312,7 +312,7 @@ def lock_info(ctx: click.Context) -> None:
     "-q",
     is_flag=True,
     default=False,
-    help="Suppress all output except errors.",
+    help="Suppress INFO/WARNING logs. Command output may still be printed.",
 )
 @click.option(
     "--cluster",

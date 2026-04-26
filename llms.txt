@@ -67,7 +67,7 @@ Global options and env vars:
 - `--connect-retries-interval` / `CLICKHOUSE_MIGRATE_CONNECT_RETRIES_INTERVAL` — seconds between retries.
 - `--send-receive-timeout` / `CLICKHOUSE_MIGRATE_SEND_RECEIVE_TIMEOUT` — ClickHouse client timeout.
 - `-v`, `--verbose` — debug output.
-- `-q`, `--quiet` — errors only.
+- `-q`, `--quiet` — suppress INFO/WARNING logs; command output such as dry-run SQL is still printed.
 
 ## Boundaries
 

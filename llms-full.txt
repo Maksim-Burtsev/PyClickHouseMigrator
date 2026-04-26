@@ -118,7 +118,7 @@ Only `.sql` files are discovered.
 | `--connect-retries-interval` | `CLICKHOUSE_MIGRATE_CONNECT_RETRIES_INTERVAL` | `1` | Seconds between startup retries. |
 | `--send-receive-timeout` | `CLICKHOUSE_MIGRATE_SEND_RECEIVE_TIMEOUT` | `600` | ClickHouse client send/receive timeout. |
 | `-v`, `--verbose` | — | off | DEBUG logging. |
-| `-q`, `--quiet` | — | off | Errors only. |
+| `-q`, `--quiet` | — | off | Suppress INFO/WARNING logs; command output such as dry-run SQL is still printed. |
 
 Connection URL example:
 
