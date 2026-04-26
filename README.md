@@ -16,19 +16,6 @@ PyClickHouseMigrator is a small, predictable migration runner for ClickHouse. It
 
 No ORM. No schema diff engine. No framework. Just a clean migration flow for teams that want their ClickHouse DDL to live in Git.
 
-## Why this exists
-
-ClickHouse schema changes are often written directly in SQL. That is usually the right choice, but the deployment flow around those changes can become fragile:
-
-- which migrations have already run?
-- did someone edit an applied migration?
-- what exactly will run in the next deployment?
-- how do we adopt an existing database?
-- how do we avoid two deployment jobs applying the same migration at the same time?
-- how do we keep cluster service metadata consistent without turning the migration tool into a platform?
-
-PyClickHouseMigrator focuses on that operational layer.
-
 ## Highlights
 
 - **Plain SQL migrations** — migration files are `.sql`, not Python modules.
