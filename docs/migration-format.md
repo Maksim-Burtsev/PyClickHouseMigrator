@@ -170,12 +170,14 @@ This makes recovery easier after partial failures.
 
 By default, `up` and `rollback` validate each statement with `EXPLAIN AST` before execution.
 
+Validation is best-effort. It is useful for catching many syntax errors before state is written, but it is not a guarantee that the statement will execute successfully and it does not judge whether a DDL operation is safe for production.
+
+If needed, you can disable this preflight step explicitly:
+
 ```sh
 migrator up --no-validate
 migrator rollback --no-validate
 ```
-
-Validation is best-effort. It is useful for catching many syntax errors before state is written, but it is not a guarantee that the statement will execute successfully and it does not judge whether a DDL operation is safe for production.
 
 ## Checksum behavior
 
