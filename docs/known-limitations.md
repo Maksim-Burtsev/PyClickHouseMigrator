@@ -61,7 +61,7 @@ You write the `-- migrator:down` section yourself. The migrator stores that roll
 
 ## Baseline is not schema validation
 
-`migrator baseline` records existing `.sql` files as baseline rows. It does not compare those files with the actual ClickHouse schema.
+`migrator baseline` marks existing `.sql` files as already applied (`baseline` rows). It does not compare those files with the actual ClickHouse schema.
 
 Use baseline as an adoption tool, not as a schema audit.
 

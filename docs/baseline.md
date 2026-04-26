@@ -65,7 +65,7 @@ It does not check that:
 - views match;
 - cluster objects exist on every node.
 
-It only records migration filenames as already applied.
+It only marks those migration files as already applied.
 
 ## Rollback behavior
 

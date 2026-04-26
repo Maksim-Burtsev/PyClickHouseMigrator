@@ -114,14 +114,14 @@ for mismatch in mismatches:
     print(mismatch.name, mismatch.stored, mismatch.actual)
 ```
 
-Repair checksums after intentional file edits:
+Repair checksums after intentional file edits, once you have confirmed that the database state is still consistent with those edits:
 
 ```python
 repaired = migrator.repair()
 print(repaired)
 ```
 
-`repair()` does not execute migration SQL. It updates checksum metadata for applied migrations whose current files exist.
+`repair()` does not execute migration SQL or modify your application schema. It updates checksum metadata for applied migrations whose current files exist. After that, future checksum checks accept the current file content.
 
 ## Baseline
 

@@ -50,7 +50,7 @@ This makes multi-statement migrations explicit and avoids fragile parsing based 
 
 ### Baseline workflow
 
-`migrator baseline` records existing migration files as already applied without executing them.
+`migrator baseline` marks existing migration files as already applied (`baseline` rows) without executing them.
 
 This is useful when adopting PyClickHouseMigrator in a project that already has a ClickHouse schema.
 
@@ -128,20 +128,6 @@ CREATE TABLE users (id UInt64) ENGINE = MergeTree ORDER BY id
 -- @stmt
 DROP TABLE users
 ```
-
-## Product boundaries
-
-PyClickHouseMigrator 2.0 intentionally does not:
-
-- generate schema diffs;
-- infer schema from ClickHouse;
-- rewrite migration SQL;
-- inject `ON CLUSTER` into user SQL;
-- generate rollback statements;
-- judge whether a migration is operationally safe;
-- orchestrate application deployments.
-
-The product is a migration runner. It applies, tracks, validates, rolls back, and reports migration state.
 
 ## Adoption checklist
 
