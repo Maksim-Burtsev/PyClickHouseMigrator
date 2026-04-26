@@ -1,7 +1,7 @@
 Change log
 ==========
 
-2.0.0 (22/04/2026)
+2.0.0 (26/04/2026)
 -------------------
 
 - SQL-first migration format: migrations are `.sql` files with `-- migrator:up`, `-- migrator:down`, and explicit `-- @stmt` blocks
