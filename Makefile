@@ -1,4 +1,4 @@
-.PHONY: test test-up test-down test-cluster test-all cluster-up cluster-wait cluster-down lint
+.PHONY: test test-up test-down test-cluster test-all cluster-up cluster-wait cluster-down lint docs docs-serve
 
 test-up:
 	docker compose -f docker-compose.test.yml up -d --wait
@@ -31,3 +31,9 @@ lint:
 	uv run ruff check .
 	uv run ruff format --check .
 	uv run mypy py_clickhouse_migrator/
+
+docs:
+	NO_MKDOCS_2_WARNING=1 uv run --group docs mkdocs build --strict
+
+docs-serve:
+	NO_MKDOCS_2_WARNING=1 uv run --group docs mkdocs serve
