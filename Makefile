@@ -33,7 +33,7 @@ lint:
 	uv run mypy py_clickhouse_migrator/
 
 docs:
-	NO_MKDOCS_2_WARNING=1 uv run --group docs mkdocs build --strict
+	uv run --frozen --group docs zensical build --strict --clean
 
 docs-serve:
-	NO_MKDOCS_2_WARNING=1 uv run --group docs mkdocs serve
+	uv run --frozen --group docs zensical serve

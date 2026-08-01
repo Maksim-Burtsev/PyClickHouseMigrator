@@ -4,43 +4,51 @@ site_url: https://maksim-burtsev.github.io/PyClickHouseMigrator/
 
 repo_url: https://github.com/Maksim-Burtsev/PyClickHouseMigrator
 repo_name: Maksim-Burtsev/PyClickHouseMigrator
-edit_uri: blob/master/docs/
+edit_uri: edit/master/docs/
 
 theme:
   name: material
+  variant: modern
+  font: false
   logo: assets/logo.png
+  favicon: assets/logo.png
   language: en
   features:
     - content.code.copy
+    - navigation.footer
+    - navigation.path
     - navigation.sections
     - navigation.top
+    - search.highlight
     - search.suggest
   palette:
     - scheme: default
-      primary: blue
-      accent: light blue
+      primary: custom
+      accent: custom
       toggle:
-        icon: material/weather-night
+        icon: lucide/moon
         name: Switch to dark mode
     - scheme: slate
-      primary: blue
-      accent: light blue
+      primary: custom
+      accent: custom
       toggle:
-        icon: material/weather-sunny
+        icon: lucide/sun
         name: Switch to light mode
-
-plugins:
-  - search
 
 extra_css:
   - stylesheets/extra.css
+
+extra_javascript:
+  - javascripts/home.js
 
 markdown_extensions:
   - admonition
   - attr_list
   - md_in_html
-  - pymdownx.highlight:
-      anchor_linenums: true
+  - pymdownx.emoji:
+      emoji_generator: zensical.extensions.emoji.to_svg
+      emoji_index: zensical.extensions.emoji.twemoji
+  - pymdownx.highlight
   - pymdownx.inlinehilite
   - pymdownx.snippets
   - pymdownx.superfences
@@ -49,20 +57,28 @@ markdown_extensions:
   - toc:
       permalink: true
 
-exclude_docs: |
-  README.md
-
 nav:
-  - Overview: index.md
-  - Core:
+  - Home: index.md
+  - Get started:
       - Migration format: migration-format.md
       - Baseline existing databases: baseline.md
-      - Cluster mode: cluster-mode.md
   - Deployment:
       - CI/CD usage: ci-cd.md
       - Docker usage: docker.md
+      - Cluster mode: cluster-mode.md
   - Reference:
       - Python API: python-api.md
       - Troubleshooting: troubleshooting.md
       - Known limitations: known-limitations.md
-      - Release 2.0: release-2.0.md
+  - Releases:
+      - Upgrade to 2.0: release-2.0.md
+
+copyright: PyClickHouseMigrator
+
+extra:
+  generator: false
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/Maksim-Burtsev/PyClickHouseMigrator
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/py-clickhouse-migrator/
