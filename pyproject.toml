@@ -57,7 +57,7 @@ dev = [
     "mypy>=1.19.1",
 ]
 docs = [
-    "mkdocs-material>=9.6,<10",
+    "zensical==0.0.52",
 ]
 
 [build-system]
