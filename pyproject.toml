@@ -1,7 +1,7 @@
 [project]
 name = "py-clickhouse-migrator"
-version = "2.0.0"
-description = "Python CLI tool for ClickHouse schema migrations with distributed locking and cluster support."
+version = "2.0.1"
+description = "SQL-first ClickHouse schema migration CLI for Python with checksums, rollback, dry-run, advisory locking, and cluster support."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
@@ -25,12 +25,16 @@ classifiers = [
 ]
 keywords = [
     "clickhouse",
-    "migrations",
-    "database",
-    "schema",
+    "clickhouse-migrations",
+    "database-migrations",
     "cli",
-    "distributed-locking",
     "cluster",
+    "schema-migrations",
+    "sql-migrations",
+    "migration-tool",
+    "python",
+    "ci-cd",
+    "advisory-locking",
 ]
 dependencies = [
     "click>=8.0.1",
@@ -46,6 +50,7 @@ Documentation = "https://maksim-burtsev.github.io/PyClickHouseMigrator/"
 Repository = "https://github.com/Maksim-Burtsev/PyClickHouseMigrator"
 Issues = "https://github.com/Maksim-Burtsev/PyClickHouseMigrator/issues"
 Changelog = "https://github.com/Maksim-Burtsev/PyClickHouseMigrator/releases"
+Docker = "https://hub.docker.com/r/maksimburtsev/py-clickhouse-migrator"
 
 [dependency-groups]
 dev = [

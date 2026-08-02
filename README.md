@@ -31,14 +31,24 @@ No ORM. No schema diff engine. No framework. Just a clean migration flow for tea
 
 ## Install
 
+As a standalone CLI:
+
 ```sh
-pip install py-clickhouse-migrator
+uv tool install py-clickhouse-migrator
 ```
 
-With `uv`:
+Or with `pipx`:
+
+```sh
+pipx install py-clickhouse-migrator
+```
+
+To keep it inside a project environment:
 
 ```sh
 uv add py-clickhouse-migrator
+# or
+pip install py-clickhouse-migrator
 ```
 
 The CLI command is:
