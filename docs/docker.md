@@ -17,7 +17,7 @@ maksimburtsev/py-clickhouse-migrator:2
 Or pin an exact version:
 
 ```text
-maksimburtsev/py-clickhouse-migrator:2.0.0
+maksimburtsev/py-clickhouse-migrator:2.0.1
 ```
 
 ## Run migrations
