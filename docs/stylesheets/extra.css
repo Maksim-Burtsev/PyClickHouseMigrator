@@ -274,7 +274,7 @@
 }
 
 .pcm-tile {
-  background: var(--pcm-surface);
+  background: color-mix(in srgb, var(--pcm-surface) 30%, var(--pcm-paper));
   border: 1px solid var(--pcm-line);
   border-radius: 1rem;
   min-height: 13rem;
@@ -291,40 +291,35 @@
 }
 
 .pcm-tile--wide code {
-  background: var(--pcm-code);
+  background: transparent;
+  border: 1px solid var(--pcm-line);
   border-radius: 0.5rem;
-  color: #f2f2ec;
+  color: var(--pcm-ink);
   display: inline-block;
   margin-top: 1rem;
   padding: 0.55rem 0.65rem;
 }
 
 .pcm-tile--accent {
+  position: relative;
+}
+
+.pcm-tile--accent::before {
   background: var(--pcm-accent);
-  border-color: transparent;
-}
-
-.pcm-tile--accent h3,
-.pcm-tile--accent p {
-  color: #222014;
-}
-
-.pcm-tile--code {
-  background: var(--pcm-code);
-}
-
-.pcm-tile--code h3,
-.pcm-tile--code p,
-.pcm-tile--code code {
-  color: #f0f1ec;
+  border-radius: 999px;
+  content: "";
+  height: 0.2rem;
+  left: 1.35rem;
+  position: absolute;
+  top: 0.65rem;
+  width: 3.2rem;
 }
 
 .pcm-tile--code code {
-  background: transparent;
-}
-
-.pcm-tile--soft {
-  background: color-mix(in srgb, var(--pcm-accent) 14%, var(--pcm-surface));
+  background: color-mix(in srgb, var(--pcm-accent) 18%, var(--pcm-surface));
+  border-radius: 0.25rem;
+  color: var(--pcm-ink);
+  padding: 0.12em 0.3em;
 }
 
 .pcm-tile h3 {
