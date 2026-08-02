@@ -17,6 +17,8 @@ PyClickHouseMigrator is a small, predictable migration runner for ClickHouse. It
 
 No ORM. No schema diff engine. No framework. Just a clean migration flow for teams that want their ClickHouse DDL to live in Git.
 
+Not sure whether that model fits your stack? Read [Why PyClickHouseMigrator?](docs/why-pyclickhousemigrator.md).
+
 ## Highlights
 
 - **Plain SQL migrations** — migration files are `.sql`, not Python modules.
