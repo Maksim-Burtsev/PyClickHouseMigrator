@@ -76,6 +76,7 @@ PyClickHouseMigrator executes migration SQL as written. It does not generate sch
 ## Docs
 
 - README: https://raw.githubusercontent.com/Maksim-Burtsev/PyClickHouseMigrator/master/README.md
+- Decision guide: https://raw.githubusercontent.com/Maksim-Burtsev/PyClickHouseMigrator/master/docs/why-pyclickhousemigrator.md
 - Migration format: https://raw.githubusercontent.com/Maksim-Burtsev/PyClickHouseMigrator/master/docs/migration-format.md
 - Baseline: https://raw.githubusercontent.com/Maksim-Burtsev/PyClickHouseMigrator/master/docs/baseline.md
 - Cluster mode: https://raw.githubusercontent.com/Maksim-Burtsev/PyClickHouseMigrator/master/docs/cluster-mode.md

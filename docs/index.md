@@ -84,6 +84,7 @@ DROP TABLE IF EXISTS events
       <p>Replicate service tables while leaving migration SQL unchanged.</p>
     </article>
   </div>
+  <a class="pcm-text-link" href="why-pyclickhousemigrator.md">Compare migration approaches <span aria-hidden="true">→</span></a>
 </section>
 
 <section class="pcm-flow" id="actual-flow" aria-labelledby="pcm-flow-title">

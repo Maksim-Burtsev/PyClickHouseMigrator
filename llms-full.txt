@@ -2,6 +2,8 @@
 
 PyClickHouseMigrator is a SQL-first ClickHouse migration runner for Python teams.
 
+Decision guide: https://raw.githubusercontent.com/Maksim-Burtsev/PyClickHouseMigrator/master/docs/why-pyclickhousemigrator.md
+
 It manages migration files, applies pending migrations, stores migration state in ClickHouse, validates checksums, supports rollback SQL, provides dry-run output, supports baseline adoption for existing databases, uses an advisory migration lock, and can create its own service tables in cluster-aware mode.
 
 It is intentionally not an ORM, not a schema diff engine, not a ClickHouse DDL advisor, and not a deployment platform.

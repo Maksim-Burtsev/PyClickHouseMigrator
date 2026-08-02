@@ -1078,6 +1078,64 @@ body:has(.pcm-home) .md-footer__inner {
     grid-column: 2;
     grid-row: 1;
   }
+
+  .pcm-comparison .md-typeset__table,
+  .pcm-comparison table,
+  .pcm-comparison tbody,
+  .pcm-comparison tr,
+  .pcm-comparison td {
+    display: block;
+    width: 100%;
+  }
+
+  .pcm-comparison thead {
+    display: none;
+  }
+
+  .pcm-comparison tbody {
+    display: grid;
+    gap: 0.8rem;
+  }
+
+  .pcm-comparison tr {
+    background: color-mix(in srgb, var(--pcm-surface) 34%, var(--pcm-paper));
+    border: 1px solid var(--pcm-line);
+    border-radius: 0.8rem;
+    padding: 1rem;
+  }
+
+  .pcm-comparison td {
+    border: 0;
+    padding: 0;
+  }
+
+  .pcm-comparison td:first-child {
+    color: var(--pcm-ink);
+    font-size: 1rem;
+  }
+
+  .pcm-comparison td + td {
+    margin-top: 0.85rem;
+  }
+
+  .pcm-comparison td:nth-child(2)::before,
+  .pcm-comparison td:nth-child(3)::before {
+    color: var(--pcm-accent-strong);
+    display: block;
+    font-size: 0.66rem;
+    font-weight: 750;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.2rem;
+    text-transform: uppercase;
+  }
+
+  .pcm-comparison td:nth-child(2)::before {
+    content: "Consider it when";
+  }
+
+  .pcm-comparison td:nth-child(3)::before {
+    content: "Trade-off to evaluate";
+  }
 }
 
 @media (max-width: 32rem) {

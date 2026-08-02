@@ -9,6 +9,7 @@ edit_uri: edit/master/docs/
 theme:
   name: material
   variant: modern
+  custom_dir: docs/overrides
   font: false
   logo: assets/logo.png
   favicon: assets/logo.png
@@ -59,6 +60,7 @@ markdown_extensions:
 
 nav:
   - Home: index.md
+  - Why PyClickHouseMigrator?: why-pyclickhousemigrator.md
   - Get started:
       - Migration format: migration-format.md
       - Baseline existing databases: baseline.md

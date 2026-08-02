@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block extrahead %}
+  {% set is_home = page.canonical_url == config.site_url %}
+  {% if is_home %}
+    {% set social_title = config.site_name %}
+  {% elif page.meta and page.meta.title %}
+    {% set social_title = page.meta.title %}
+  {% elif page.title %}
+    {% set social_title = page.title | striptags %}
+  {% else %}
+    {% set social_title = config.site_name %}
+  {% endif %}
+  {% if page.meta and page.meta.description %}
+    {% set social_description = page.meta.description %}
+  {% else %}
+    {% set social_description = config.site_description %}
+  {% endif %}
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="{{ config.site_name }}">
+  <meta property="og:title" content="{{ social_title }}{% if not is_home %} - {{ config.site_name }}{% endif %}">
+  <meta property="og:description" content="{{ social_description }}">
+  {% if page.canonical_url %}<meta property="og:url" content="{{ page.canonical_url }}">{% endif %}
+  <meta property="og:image" content="{{ config.site_url }}assets/social-preview.png">
+  <meta property="og:image:width" content="1280">
+  <meta property="og:image:height" content="640">
+  <meta property="og:image:alt" content="PyClickHouseMigrator — Plain SQL. Auditable migrations.">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="{{ social_title }}{% if not is_home %} - {{ config.site_name }}{% endif %}">
+  <meta name="twitter:description" content="{{ social_description }}">
+  <meta name="twitter:image" content="{{ config.site_url }}assets/social-preview.png">
+{% endblock %}
