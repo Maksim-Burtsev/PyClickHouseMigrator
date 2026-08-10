@@ -62,7 +62,7 @@ dev = [
     "mypy>=1.19.1",
 ]
 docs = [
-    "zensical==0.0.52",
+    "zensical==0.0.53",
 ]
 
 [build-system]
