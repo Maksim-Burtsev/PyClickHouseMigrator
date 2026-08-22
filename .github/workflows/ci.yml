@@ -33,17 +33,25 @@ jobs:
         run: uv run mypy py_clickhouse_migrator/
 
   test:
-    name: Test (Python ${{ matrix.python-version }})
+    name: Test (Python ${{ matrix.python-version }} / ClickHouse ${{ matrix.clickhouse }})
     needs: lint
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13", "3.14"]
+        include:
+          - python-version: "3.11"
+            clickhouse: "24.8"
+          - python-version: "3.12"
+            clickhouse: "25.3"
+          - python-version: "3.13"
+            clickhouse: "latest"
+          - python-version: "3.14"
+            clickhouse: "latest"
 
     services:
       clickhouse:
-        image: clickhouse/clickhouse-server:latest
+        image: clickhouse/clickhouse-server:${{ matrix.clickhouse }}
         ports:
           - 19000:9000
         env:

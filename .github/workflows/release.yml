@@ -46,10 +46,11 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
 
   docker:
-    name: Docker Hub
+    name: Docker Hub + GHCR
     needs: publish
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       packages: write
 
     steps:
@@ -59,6 +60,12 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Login to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
       - name: Set up Docker Buildx
@@ -67,7 +74,9 @@ jobs:
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: maksimburtsev/py-clickhouse-migrator
+          images: |
+            maksimburtsev/py-clickhouse-migrator
+            ghcr.io/maksim-burtsev/pyclickhousemigrator
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
