@@ -1,6 +1,6 @@
 ---
 title: Why PyClickHouseMigrator?
-description: Decide whether PyClickHouseMigrator fits your ClickHouse schema migration workflow, and compare it with raw SQL, Goose, Flyway, Liquibase, and clickhouse-migrations for Python.
+description: How to run ClickHouse migrations in Python, and how PyClickHouseMigrator compares with golang-migrate, Atlas, Goose, Flyway, Liquibase, dbt, Alembic, and clickhouse-migrations.
 ---
 
 # Why PyClickHouseMigrator?
@@ -8,6 +8,8 @@ description: Decide whether PyClickHouseMigrator fits your ClickHouse schema mig
 PyClickHouseMigrator is a focused migration runner for Python teams that want to write ClickHouse DDL themselves, keep it in Git, and apply it through a small CLI or library.
 
 It is deliberately not an ORM, schema diff engine, database provisioning tool, or deployment platform.
+
+If you arrived here looking for "an Alembic for ClickHouse" or "golang-migrate but in Python": this is a runner in that family, built for ClickHouse only. The comparison table below says plainly where the alternatives are the better choice.
 
 !!! note
     This is a decision guide, not a benchmark. It compares documented operating models and trade-offs. Follow the linked project documentation when evaluating current versions.
@@ -53,6 +55,10 @@ No migration runner can make ClickHouse DDL transactional. Design multi-statemen
 | [**Flyway**](https://documentation.red-gate.com/fd/supported-databases-for-flyway-143754067.html) | An organization already standardizes migrations and governance around Flyway or JVM tooling. | ClickHouse is listed for foundational migration capabilities; verify the exact capability and licensing level your workflow requires. |
 | [**Liquibase**](https://github.com/MEDIARITHMICS/liquibase-clickhouse) | An organization already uses Liquibase across databases and values one consistent process. | ClickHouse support uses an extension; validate extension compatibility, cluster behavior, and the operational footprint for your environment. |
 | [**clickhouse-migrations for Python**](https://pypi.org/project/clickhouse-migrations/) | A Python 3.9+ team wants a file-based runner with native and HTTP drivers, a GitHub Action, Docker image, dry-run, and paired down files. | Its file format and safety model differ. Compare statement splitting, checksum behavior, rollback semantics, validation, baseline, and locking against your requirements. |
+| [**golang-migrate**](https://github.com/golang-migrate/migrate) | A polyglot team already runs `migrate` for Postgres or MySQL and wants one binary and one file convention across engines. | Its ClickHouse driver is one of many; check how it handles `ON CLUSTER`, multi-statement files, and checksum drift, none of which are ClickHouse-specific in a generic runner. |
+| [**Atlas**](https://atlasgo.io/) | You want a declarative desired-state schema and machine-generated diffs, with lint and CI policies on top. | Atlas plans changes for you; that is the opposite trade-off from hand-written reviewed SQL. Evaluate its ClickHouse coverage and the paid-tier boundary for the features you need. |
+| [**dbt**](https://github.com/ClickHouse/dbt-clickhouse) | Your problem is analytics transformations — models, tests, and incremental tables built from queries. | dbt manages the objects it creates, not your base schema. It is complementary to a migration runner, not a replacement: dbt is for transformations, migrations are for DDL. |
+| [**Alembic**](https://alembic.sqlalchemy.org/) | Your team lives in SQLAlchemy and wants one migration story for the whole stack. | Alembic is built around SQLAlchemy and OLTP semantics. ClickHouse support is third-party (`clickhouse-sqlalchemy`), and autogenerate does not map cleanly onto MergeTree engines, `ON CLUSTER`, or ClickHouse's non-transactional DDL. |
 
 </div>
 
