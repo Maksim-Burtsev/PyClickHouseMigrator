@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   render:
@@ -68,14 +68,15 @@ jobs:
         with:
           path: demo/demo.tape
 
-      - name: Commit GIF
+      - name: Upload GIF
+        uses: actions/upload-artifact@v7
+        with:
+          name: demo-gif
+          path: assets/demo.gif
+          if-no-files-found: error
+
+      - name: Summary
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add assets/demo.gif
-          if git diff --staged --quiet; then
-            echo "GIF unchanged"
-          else
-            git commit -m "chore: regenerate demo GIF [skip ci]"
-            git push
-          fi
+          echo "Rendered \`assets/demo.gif\` (\`$(du -h assets/demo.gif | cut -f1)\`)." >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Download it from the **demo-gif** artifact above, drop it into \`assets/\`, and open a PR to update the README GIF." >> "$GITHUB_STEP_SUMMARY"
