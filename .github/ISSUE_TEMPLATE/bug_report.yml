@@ -1,0 +1,48 @@
+name: Bug report
+description: Something does not work as documented
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: The command you ran and its full output. Include the migration SQL if relevant.
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: PyClickHouseMigrator version
+      description: Output of `migrator --version`
+      placeholder: "2.1.0"
+    validations:
+      required: true
+  - type: input
+    id: clickhouse
+    attributes:
+      label: ClickHouse version
+      placeholder: "25.3"
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      placeholder: "3.13"
+  - type: dropdown
+    id: cluster
+    attributes:
+      label: Cluster mode
+      options:
+        - "No — single node"
+        - "Yes — ON CLUSTER"
+    validations:
+      required: true

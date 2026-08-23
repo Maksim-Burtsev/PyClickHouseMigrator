@@ -2,16 +2,28 @@
   <img src="https://raw.githubusercontent.com/Maksim-Burtsev/PyClickHouseMigrator/master/assets/logo.png" alt="PyClickHouseMigrator" width="200">
 </p>
 
-# PyClickHouseMigrator
+<h1 align="center">PyClickHouseMigrator</h1>
 
-[![CI](https://github.com/Maksim-Burtsev/PyClickHouseMigrator/actions/workflows/ci.yml/badge.svg)](https://github.com/Maksim-Burtsev/PyClickHouseMigrator/actions)
-[![PyPI](https://img.shields.io/pypi/v/py-clickhouse-migrator)](https://pypi.org/project/py-clickhouse-migrator/)
-[![Python](https://img.shields.io/badge/python-3.11%20|%203.12%20|%203.13%20|%203.14-blue)](https://pypi.org/project/py-clickhouse-migrator/)
-[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://maksim-burtsev.github.io/PyClickHouseMigrator/)
-[![codecov](https://codecov.io/gh/Maksim-Burtsev/PyClickHouseMigrator/branch/master/graph/badge.svg)](https://codecov.io/gh/Maksim-Burtsev/PyClickHouseMigrator)
-[![Downloads](https://static.pepy.tech/personalized-badge/py-clickhouse-migrator?period=total&units=INTERNATIONAL_SYSTEM&left_color=grey&right_color=brightgreen&left_text=downloads)](https://pepy.tech/projects/py-clickhouse-migrator)
+<p align="center"><strong>SQL-first ClickHouse migrations for Python teams.</strong><br>
+Plain <code>.sql</code> files, ordered applies, checksums, rollback, dry-run — no ORM, no diff engine.</p>
 
-**SQL-first ClickHouse migrations for Python teams.**
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Maksim-Burtsev/PyClickHouseMigrator/master/assets/demo.gif" alt="migrator init, new, up --dry-run, up, show, rollback" width="900">
+</p>
+
+```sh
+uv tool install py-clickhouse-migrator
+```
+
+<p align="center">
+<a href="https://github.com/Maksim-Burtsev/PyClickHouseMigrator/actions"><img src="https://github.com/Maksim-Burtsev/PyClickHouseMigrator/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+<a href="https://pypi.org/project/py-clickhouse-migrator/"><img src="https://img.shields.io/pypi/v/py-clickhouse-migrator" alt="PyPI"></a>
+<a href="https://pypi.org/project/py-clickhouse-migrator/"><img src="https://img.shields.io/badge/python-3.11%20|%203.12%20|%203.13%20|%203.14-blue" alt="Python"></a>
+<a href="https://github.com/Maksim-Burtsev/PyClickHouseMigrator/actions/workflows/ci.yml"><img src="https://img.shields.io/badge/ClickHouse-24.8%20|%2025.3%20|%20latest-yellow" alt="Tested ClickHouse versions"></a>
+<a href="https://maksim-burtsev.github.io/PyClickHouseMigrator/"><img src="https://img.shields.io/badge/docs-GitHub%20Pages-blue" alt="Docs"></a>
+<a href="https://codecov.io/gh/Maksim-Burtsev/PyClickHouseMigrator"><img src="https://codecov.io/gh/Maksim-Burtsev/PyClickHouseMigrator/branch/master/graph/badge.svg" alt="codecov"></a>
+<a href="https://pepy.tech/projects/py-clickhouse-migrator"><img src="https://static.pepy.tech/personalized-badge/py-clickhouse-migrator?period=total&units=INTERNATIONAL_SYSTEM&left_color=grey&right_color=brightgreen&left_text=downloads" alt="Downloads"></a>
+</p>
 
 PyClickHouseMigrator is a small, predictable migration runner for ClickHouse. It keeps schema changes in plain `.sql` files, applies them in order, stores migration state inside ClickHouse, validates checksums, supports rollback SQL, and fits naturally into CI/CD.
 
@@ -396,6 +408,12 @@ clickhouse://user:password@host:9440/database?secure=True
 docker pull maksimburtsev/py-clickhouse-migrator:latest
 ```
 
+Also published to GHCR, if Docker Hub is rate-limited or blocked in your infra:
+
+```sh
+docker pull ghcr.io/maksim-burtsev/pyclickhousemigrator:latest
+```
+
 Run migrations:
 
 ```sh
@@ -527,6 +545,25 @@ See [Python API](docs/python-api.md).
 
 See [Known limitations](docs/known-limitations.md).
 
+## Versioning and stability
+
+PyClickHouseMigrator follows [Semantic Versioning](https://semver.org/).
+
+- The CLI surface, the migration file format, and the service table schema are
+  the public API. Breaking changes to any of them only happen in a major release.
+- `2.x` is production-ready. It is tested on every release against ClickHouse
+  24.8, 25.3, and `latest`, on Python 3.11 through 3.14, in both single-node and
+  `ON CLUSTER` mode.
+- Pin a major tag (`py-clickhouse-migrator>=2,<3`, or the Docker tag `:2`) and
+  upgrades stay safe.
+
+Changes per release are in [CHANGELOG.md](CHANGELOG.md).
+
+## Contributing
+
+Bug reports and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
+Security issues should go through a [private advisory](SECURITY.md), not a public issue.
+
 ## Documentation
 
 - [Migration format](docs/migration-format.md)
@@ -541,4 +578,4 @@ See [Known limitations](docs/known-limitations.md).
 
 ## License
 
-[MIT](LICENCE.txt)
+[MIT](LICENSE)

@@ -1,6 +1,6 @@
 [project]
 name = "py-clickhouse-migrator"
-version = "2.0.1"
+version = "2.1.0"
 description = "SQL-first ClickHouse schema migration CLI for Python with checksums, rollback, dry-run, advisory locking, and cluster support."
 readme = "README.md"
 license = "MIT"
@@ -49,7 +49,7 @@ Homepage = "https://github.com/Maksim-Burtsev/PyClickHouseMigrator"
 Documentation = "https://maksim-burtsev.github.io/PyClickHouseMigrator/"
 Repository = "https://github.com/Maksim-Burtsev/PyClickHouseMigrator"
 Issues = "https://github.com/Maksim-Burtsev/PyClickHouseMigrator/issues"
-Changelog = "https://github.com/Maksim-Burtsev/PyClickHouseMigrator/releases"
+Changelog = "https://github.com/Maksim-Burtsev/PyClickHouseMigrator/blob/master/CHANGELOG.md"
 Docker = "https://hub.docker.com/r/maksimburtsev/py-clickhouse-migrator"
 
 [dependency-groups]

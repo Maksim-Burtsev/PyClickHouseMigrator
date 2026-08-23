@@ -8,6 +8,16 @@ PyClickHouseMigrator can run as a containerized CLI.
 docker pull maksimburtsev/py-clickhouse-migrator:latest
 ```
 
+The same image is published to GitHub Container Registry, which is useful if
+your infrastructure rate-limits or blocks Docker Hub:
+
+```sh
+docker pull ghcr.io/maksim-burtsev/pyclickhousemigrator:latest
+```
+
+Both registries carry identical tags: `latest`, `2`, `2.1`, `2.1.0`, for
+`linux/amd64` and `linux/arm64`.
+
 Use `latest` for a quick start. For repeatable automation, pin to a major version tag:
 
 ```text
@@ -17,7 +27,7 @@ maksimburtsev/py-clickhouse-migrator:2
 Or pin an exact version:
 
 ```text
-maksimburtsev/py-clickhouse-migrator:2.0.1
+maksimburtsev/py-clickhouse-migrator:2.1.0
 ```
 
 ## Run migrations

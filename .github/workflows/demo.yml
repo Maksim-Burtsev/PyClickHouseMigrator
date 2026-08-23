@@ -1,0 +1,81 @@
+name: Demo GIF
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - demo/**
+      - .github/workflows/demo.yml
+
+concurrency:
+  group: demo-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  render:
+    name: Render assets/demo.gif
+    runs-on: ubuntu-latest
+
+    services:
+      clickhouse:
+        image: clickhouse/clickhouse-server:latest
+        ports:
+          - 19000:9000
+        env:
+          CLICKHOUSE_DB: test
+          CLICKHOUSE_USER: default
+          CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+        options: >-
+          --health-cmd "clickhouse-client --query 'SELECT 1'"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Install migrator
+        run: |
+          uv sync --dev
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Wait for ClickHouse service
+        run: |
+          probe="from clickhouse_driver import Client; Client.from_url('clickhouse://default@localhost:19000/test').execute('SELECT 1')"
+          for i in $(seq 1 30); do
+            if .venv/bin/python -c "$probe" 2>/dev/null; then
+              echo "ClickHouse ready"
+              exit 0
+            fi
+            echo "Waiting for ClickHouse... ($i/30)"
+            sleep 2
+          done
+          echo "ClickHouse service did not become ready" >&2
+          exit 1
+
+      - name: Render tape
+        uses: charmbracelet/vhs-action@v2
+        with:
+          path: demo/demo.tape
+
+      - name: Commit GIF
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/demo.gif
+          if git diff --staged --quiet; then
+            echo "GIF unchanged"
+          else
+            git commit -m "chore: regenerate demo GIF [skip ci]"
+            git push
+          fi

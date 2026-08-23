@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Documentation
+    url: https://maksim-burtsev.github.io/PyClickHouseMigrator/
+    about: Migration format, CI/CD, cluster mode, troubleshooting.
+  - name: Known limitations
+    url: https://maksim-burtsev.github.io/PyClickHouseMigrator/known-limitations/
+    about: Check here before filing — some behavior is intentional.
+  - name: Security vulnerability
+    url: https://github.com/Maksim-Burtsev/PyClickHouseMigrator/security/advisories/new
+    about: Report privately, not as a public issue.

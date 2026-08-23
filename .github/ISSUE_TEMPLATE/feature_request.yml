@@ -1,0 +1,31 @@
+name: Feature request
+description: Suggest a change or addition
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you hitting?
+      description: Describe the situation, not the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like it to do?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What are you doing today instead?
+      description: Workarounds, other tools, manual steps.
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope check
+      description: >
+        This tool intentionally stays small — it applies migrations, it is not a
+        schema platform. See docs/known-limitations.md.
+      options:
+        - label: I have read the known limitations and this is not one of them

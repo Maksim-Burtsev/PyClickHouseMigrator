@@ -42,3 +42,6 @@ Thumbs.db
 
 # uv
 .python-version
+
+# Local article drafts (published elsewhere, not part of the package)
+managing_clickhouse_migrations_devto*.md

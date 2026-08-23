@@ -1,8 +1,20 @@
-Change log
-==========
+# Changelog
 
-2.0.1 (02/08/2026)
--------------------
+All notable changes to this project are documented here.
+This project follows [Semantic Versioning](https://semver.org/): breaking changes only in major releases.
+
+## 2.1.0 — 2026-08-23
+
+- Published the image to GitHub Container Registry (`ghcr.io/maksim-burtsev/pyclickhousemigrator`) alongside Docker Hub, with identical tags and both architectures
+- Added ClickHouse 24.8 and 25.3 to the CI test matrix; previously only `latest` was tested
+- Fixed the `org.opencontainers.image.licenses` label in the image (the singular `license` key is not valid OCI and was ignored) and added title, description, and documentation labels
+- Added `SECURITY.md`, `CONTRIBUTING.md`, issue forms, and a pull request template
+- Renamed `LICENCE.txt` to `LICENSE` so GitHub detects the license, and `CHANGELOG.txt` to `CHANGELOG.md`
+- Added a demo GIF to the README, rendered from a VHS tape in CI
+- Documented the comparison with golang-migrate, Atlas, dbt, and Alembic
+- No CLI or migration behavior changes
+
+## 2.0.1 — 2026-08-02
 
 - Added the hosted documentation site and linked it from README and package metadata
 - Added the `py.typed` marker for typed-package discovery
@@ -11,8 +23,7 @@ Change log
 - Updated CI and documentation workflows
 - No CLI or migration behavior changes
 
-2.0.0 (26/04/2026)
--------------------
+## 2.0.0 — 2026-04-26
 
 - SQL-first migration format: migrations are `.sql` files with `-- migrator:up`, `-- migrator:down`, and explicit `-- @stmt` blocks
 - Removed the old documented Python migration workflow from user-facing documentation
@@ -25,8 +36,7 @@ Change log
 - Hardened lock cluster name validation
 - Full documentation refresh for README, llms.txt, llms-full.txt, and docs/*
 
-1.1.0 (30/03/2026)
--------------------
+## 1.1.0 — 2026-03-30
 
 - New --send-receive-timeout option
 - Docker image (Docker Hub)
@@ -35,8 +45,7 @@ Change log
 - Checksum computed from SQL output instead of file content
 - Removed unused termcolor dependency
 
-1.0.0 (22/03/2026)
--------------------
+## 1.0.0 — 2026-03-22
 
 - Distributed locking with TTL
 - Checksum validation & repair
@@ -47,17 +56,14 @@ Change log
 - CLI error handling
 - --version flag
 
-0.3 (19/03/2024)
-------------------
+## 0.3 — 2024-03-19
 
 - Fix queries parsing
 
-0.2 (26/12/2023)
-------------------
+## 0.2 — 2023-12-26
 
 - Add .env loading
 
-0.1 (24/12/2023)
-------------------
+## 0.1 — 2023-12-24
 
 - First release
