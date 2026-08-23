@@ -22,7 +22,7 @@ body:
     attributes:
       label: PyClickHouseMigrator version
       description: Output of `migrator --version`
-      placeholder: "2.0.1"
+      placeholder: "2.1.0"
     validations:
       required: true
   - type: input

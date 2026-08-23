@@ -3,6 +3,17 @@
 All notable changes to this project are documented here.
 This project follows [Semantic Versioning](https://semver.org/): breaking changes only in major releases.
 
+## 2.1.0 — 2026-08-23
+
+- Published the image to GitHub Container Registry (`ghcr.io/maksim-burtsev/pyclickhousemigrator`) alongside Docker Hub, with identical tags and both architectures
+- Added ClickHouse 24.8 and 25.3 to the CI test matrix; previously only `latest` was tested
+- Fixed the `org.opencontainers.image.licenses` label in the image (the singular `license` key is not valid OCI and was ignored) and added title, description, and documentation labels
+- Added `SECURITY.md`, `CONTRIBUTING.md`, issue forms, and a pull request template
+- Renamed `LICENCE.txt` to `LICENSE` so GitHub detects the license, and `CHANGELOG.txt` to `CHANGELOG.md`
+- Added a demo GIF to the README, rendered from a VHS tape in CI
+- Documented the comparison with golang-migrate, Atlas, dbt, and Alembic
+- No CLI or migration behavior changes
+
 ## 2.0.1 — 2026-08-02
 
 - Added the hosted documentation site and linked it from README and package metadata
