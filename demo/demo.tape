@@ -1,6 +1,11 @@
 # Demo GIF for the README.
 #
-# Rendered in CI by .github/workflows/demo.yml. To render locally:
+# The committed assets/demo.gif is rendered from this tape by hand and updated
+# through a normal pull request. .github/workflows/demo.yml renders the tape on
+# demand and uploads the result as an artifact, so you can check that the tape
+# still works and download a fresh GIF without recording anything.
+#
+# To render locally:
 #
 #   docker compose -f docker-compose.test.yml up -d --wait
 #   uv sync --dev && export PATH="$PWD/.venv/bin:$PATH"
