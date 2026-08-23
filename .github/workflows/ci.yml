@@ -33,7 +33,9 @@ jobs:
         run: uv run mypy py_clickhouse_migrator/
 
   test:
-    name: Test (Python ${{ matrix.python-version }} / ClickHouse ${{ matrix.clickhouse }})
+    # Keep this name stable: the master ruleset requires these exact check
+    # names. The ClickHouse version is reported by the step below instead.
+    name: Test (Python ${{ matrix.python-version }})
     needs: lint
     runs-on: ubuntu-latest
     strategy:
@@ -102,14 +104,14 @@ jobs:
               raise SystemExit(f"ClickHouse service did not become ready: {last_error}")
           PY
 
-      - name: Run tests
+      - name: Run tests (ClickHouse ${{ matrix.clickhouse }})
         run: uv run pytest -v --cov=py_clickhouse_migrator --cov-report=xml
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v7
         with:
           files: coverage.xml
-          flags: "python-${{ matrix.python-version }}"
+          flags: "python-${{ matrix.python-version }}-ch-${{ matrix.clickhouse }}"
           token: ${{ secrets.CODECOV_TOKEN }}
 
   test-cluster:
