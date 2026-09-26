@@ -19,7 +19,7 @@ from pathlib import Path
 DEFAULT_PATHS = ("py_clickhouse_migrator", "tests", "scripts")
 
 
-def iter_python_files(paths: list[str]) -> Iterator[Path]:
+def _iter_python_files(paths: list[str]) -> Iterator[Path]:
     for raw_path in paths:
         path = Path(raw_path)
         if path.is_dir():
@@ -28,7 +28,7 @@ def iter_python_files(paths: list[str]) -> Iterator[Path]:
             yield path
 
 
-def find_comments(path: Path) -> Iterator[tuple[int, str]]:
+def _find_comments(path: Path) -> Iterator[tuple[int, str]]:
     with path.open("rb") as source:
         for token in tokenize.tokenize(source.readline):
             if token.type == tokenize.COMMENT:
@@ -36,17 +36,17 @@ def find_comments(path: Path) -> Iterator[tuple[int, str]]:
 
 
 def main(argv: list[str]) -> int:
+    """Print every comment found in ``argv`` paths; return 1 if there are any, else 0."""
     violations = [
         f"{path}:{line}: {text}"
-        for path in iter_python_files(argv or list(DEFAULT_PATHS))
-        for line, text in find_comments(path)
+        for path in _iter_python_files(argv or list(DEFAULT_PATHS))
+        for line, text in _find_comments(path)
     ]
-    for violation in violations:
-        print(violation)
-    if violations:
-        print(f"Found {len(violations)} comment(s). Comments are banned, see AGENTS.md.", file=sys.stderr)
-        return 1
-    return 0
+    if not violations:
+        return 0
+    sys.stdout.write("".join(f"{violation}\n" for violation in violations))
+    sys.stderr.write(f"Found {len(violations)} comment(s). Comments are banned, see AGENTS.md.\n")
+    return 1
 
 
 if __name__ == "__main__":

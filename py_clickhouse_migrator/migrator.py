@@ -1,50 +1,42 @@
+"""Migration runner for one ClickHouse database, plus helpers that create migration files."""
+
 import datetime as dt
+import itertools
 import logging
-import os
 import re
-import time
-from dataclasses import dataclass
-from enum import StrEnum
-from functools import cached_property
+from pathlib import Path
 from typing import Final, NamedTuple
 
-import click
 from clickhouse_driver import Client
 from clickhouse_driver.errors import ServerException
 
-from py_clickhouse_migrator.checksum import compute_checksum_from_statements
+from py_clickhouse_migrator.clickhouse import (
+    SQL,
+    ClickHouseSettings,
+    cluster_settings,
+    is_sql_identifier,
+    on_cluster_clause,
+    wait_until_healthy,
+)
 from py_clickhouse_migrator.errors import (
     BaselineError,
     ChecksumMismatchError,
-    ClickHouseServerIsNotHealthyError,
-    DatabaseNotFoundError,
     InvalidMigrationError,
     InvalidStatementError,
-    MigrationParseError,
     MigrationDirectoryNotFoundError,
     MissingDatabaseUrlError,
 )
-from py_clickhouse_migrator.migration_parser import (
-    MigrationSections,
-    MigrationStatements,
-    extract_migration_statements,
-    load_migration_sections,
+from py_clickhouse_migrator.migration import Migration, MigrationDirection, MigrationKind, load_migration
+from py_clickhouse_migrator.reports import (
+    MISSING,
+    MODIFIED,
+    MigrationStatus,
+    echo_dry_run,
+    render_integrity_warning,
+    render_status,
 )
 
 logger = logging.getLogger("py_clickhouse_migrator")
-
-SQL = str
-ClickHouseSettings = dict[str, str | int]
-
-_SQL_IDENTIFIER_RE: Final[re.Pattern[str]] = re.compile(r"[a-zA-Z_][a-zA-Z0-9_]*\Z")
-_UNKNOWN_DATABASE_CODE: Final[int] = 81
-_MIGRATION_NAME_RE: Final[re.Pattern[str]] = re.compile(r"[a-zA-Z0-9_]+\Z")
-
-_CLUSTER_SETTINGS: ClickHouseSettings = {
-    "insert_quorum": "auto",
-    "select_sequential_consistency": 1,
-}
-
 
 MIGRATION_TEMPLATE: str = """-- migrator:up
 -- @stmt
@@ -54,99 +46,111 @@ MIGRATION_TEMPLATE: str = """-- migrator:up
 -- @stmt
 """
 DEFAULT_MIGRATIONS_DIR: str = "./db/migrations"
+DEFAULT_SEND_RECEIVE_TIMEOUT: Final = 600
+CHECKSUM_PREVIEW_LENGTH: Final = 12
+
+_MIGRATION_NAME_RE: Final[re.Pattern[str]] = re.compile(r"[a-zA-Z0-9_]+\Z")
+_STATEMENT_PREVIEW_LENGTH: Final = 500
+_ENGINE: Final = "MergeTree()"
+_REPLICATED_ENGINE: Final = "ReplicatedMergeTree('/clickhouse/tables/{uuid}/{shard}', '{replica}')"
+_SELECT_APPLIED_NAMES: Final = "SELECT name FROM db_migrations ORDER BY dt"
+_SELECT_NAMES_BY_KIND: Final = "SELECT name FROM db_migrations WHERE kind = %(kind)s ORDER BY dt"
+_SELECT_CHECKSUMS: Final = """
+    SELECT name, checksum
+    FROM db_migrations
+    WHERE kind = %(kind)s
+    ORDER BY dt
+"""
+_SELECT_FOR_ROLLBACK: Final = """
+    SELECT name, up, rollback, kind
+    FROM db_migrations
+    WHERE kind = %(kind)s
+    ORDER BY dt DESC
+    LIMIT %(number)s
+"""
+_INSERT_APPLIED: Final = "INSERT INTO db_migrations (name, kind, up, rollback, checksum) VALUES"
+_INSERT_BASELINED: Final = "INSERT INTO db_migrations (name, kind, up, rollback, dt, checksum) VALUES"
+_DELETE_MIGRATION: Final = "DELETE FROM db_migrations WHERE name = %(name)s"
+_UPDATE_CHECKSUM: Final = "ALTER TABLE db_migrations UPDATE checksum = %(checksum)s WHERE name = %(name)s"
 
 
 class ChecksumMismatch(NamedTuple):
+    """An applied migration whose file changed; ``actual`` is empty when the file is missing."""
+
     name: str
     stored: str
     actual: str
 
 
 class ShowMigrationsResult(NamedTuple):
+    """Output of ``Migrator.show_migrations``: the status report and an integrity warning, if any."""
+
     output: str
     warning: str
 
 
-class MigrationDirection(StrEnum):
-    UP = "up"
-    ROLLBACK = "rollback"
-
-
-class MigrationKind(StrEnum):
-    MIGRATION = "migration"
-    BASELINE = "baseline"
-
-
-@dataclass
-class Migration:
-    name: str
-    up: SQL
-    rollback: SQL
-    kind: str = MigrationKind.MIGRATION
-
-    @cached_property
-    def _statements(self) -> MigrationStatements:
-        try:
-            return extract_migration_statements(MigrationSections(up=self.up, rollback=self.rollback))
-        except MigrationParseError as exc:
-            raise InvalidMigrationError(f"Migration {self.name}: {exc}") from exc
-
-    @property
-    def up_statements(self) -> list[SQL]:
-        return self._statements.up
-
-    @property
-    def rollback_statements(self) -> list[SQL]:
-        return self._statements.rollback
-
-    @property
-    def is_baseline(self) -> bool:
-        return self.kind == MigrationKind.BASELINE
-
-
 def create_migrations_dir(migrations_dir: str = DEFAULT_MIGRATIONS_DIR) -> None:
     """Create the migrations directory if it doesn't exist."""
-    os.makedirs(migrations_dir, exist_ok=True)
+    Path(migrations_dir).mkdir(parents=True, exist_ok=True)
     logger.info("Migrations directory %s successfully initialized.", migrations_dir)
 
 
 def make_migration_filename(name: str = "") -> str:
-    """Generate a timestamped migration filename."""
+    """Generate a timestamped migration filename.
+
+    The timestamp uses local time with second precision, so files sort in creation order.
+
+    Raises:
+        ValueError: ``name`` contains characters other than letters, digits, and underscores.
+
+    """
     if name and not _MIGRATION_NAME_RE.match(name):
         raise ValueError(f"Invalid migration name: '{name}'. Use only letters, digits, and underscores.")
-    filename = dt.datetime.now().strftime("%Y%m%d%H%M%S")
-    if name:
-        filename += f"_{name}"
-    filename += ".sql"
-    return filename
+    timestamp = dt.datetime.now(tz=dt.UTC).astimezone().strftime("%Y%m%d%H%M%S")
+    suffix = f"_{name}" if name else ""
+    return f"{timestamp}{suffix}.sql"
 
 
 def create_migration_file(migrations_dir: str = DEFAULT_MIGRATIONS_DIR, name: str = "") -> str:
-    """Create a new migration file from template. Returns the filepath."""
+    """Create a new migration file from template. Returns the filepath.
+
+    Raises:
+        MigrationDirectoryNotFoundError: ``migrations_dir`` does not exist.
+
+    """
     if not name:
         logger.warning("Migration name is recommended: py-clickhouse-migrator new <name>")
 
-    filename = make_migration_filename(name)
-    filepath = os.path.join(migrations_dir, filename)
+    directory = migrations_dir.removesuffix("/")
+    filepath = f"{directory}/{make_migration_filename(name)}"
     try:
-        with open(filepath, "w", encoding="utf-8") as f:
-            f.write(MIGRATION_TEMPLATE)
+        Path(filepath).write_text(MIGRATION_TEMPLATE, encoding="utf-8")
     except FileNotFoundError:
         raise MigrationDirectoryNotFoundError(
-            f"Migration directory {migrations_dir} not found.\nMake sure you run 'init' first."
+            f"Migration directory {migrations_dir} not found.\nMake sure you run 'init' first.",
         ) from None
 
     logger.info("Migration %s has been created.", filepath)
     return filepath
 
 
-class Migrator(object):
+class Migrator:
     """ClickHouse schema migration manager.
 
+    Creating an instance connects to ClickHouse, checks that the database exists, and creates the
+    ``db_migrations`` service table if needed.
+
     Args:
+        database_url: ClickHouse connection URL; the database in it must already exist.
+        migrations_dir: Directory with ``.sql`` migration files.
         cluster: ClickHouse cluster name for replicated operations.
         connect_retries: Number of connection retry attempts on startup.
         connect_retries_interval: Seconds between connection retries.
+        send_receive_timeout: ClickHouse client send/receive timeout in seconds.
+
+    Raises:
+        MissingDatabaseUrlError: ``database_url`` is empty.
+        ValueError: ``cluster`` is not a valid SQL identifier.
 
     """
 
@@ -157,34 +161,36 @@ class Migrator(object):
         cluster: str = "",
         connect_retries: int = 0,
         connect_retries_interval: int = 1,
-        send_receive_timeout: int = 600,
+        send_receive_timeout: int = DEFAULT_SEND_RECEIVE_TIMEOUT,
     ) -> None:
+        """Connect to ClickHouse and prepare the ``db_migrations`` table."""
         if not database_url:
             raise MissingDatabaseUrlError(
-                "ClickHouse url was not provided.\nUse --url option or set CLICKHOUSE_MIGRATE_URL environment variable."
+                "ClickHouse url was not provided.\n"
+                "Use --url option or set CLICKHOUSE_MIGRATE_URL environment variable.",
             )
+        if cluster and not is_sql_identifier(cluster):
+            raise ValueError(f"Invalid cluster name: '{cluster}'. Use only letters, digits, and underscores.")
         self.database_url: str = database_url
         self.migrations_dir: str = migrations_dir
         self.cluster: str = cluster
-        if self.cluster and not _SQL_IDENTIFIER_RE.match(self.cluster):
-            raise ValueError(f"Invalid cluster name: '{self.cluster}'. Use only letters, digits, and underscores.")
-        self._connect_retries: int = connect_retries
-        self._connect_retries_interval: int = connect_retries_interval
-        self._settings: ClickHouseSettings = _CLUSTER_SETTINGS.copy() if self.cluster else {}
+        self._connect_retries = connect_retries
+        self._connect_retries_interval = connect_retries_interval
+        self._settings: ClickHouseSettings = cluster_settings(cluster)
         self.ch_client: Client = Client.from_url(database_url)
         self.ch_client.connection.send_receive_timeout = send_receive_timeout
         self.health_check()
         self.check_migrations_table()
 
     def check_migrations_table(self) -> None:
-        on_cluster = f"ON CLUSTER {self.cluster}" if self.cluster else ""
-        engine = (
-            "ReplicatedMergeTree('/clickhouse/tables/{uuid}/{shard}', '{replica}')" if self.cluster else "MergeTree()"
-        )
+        """Create the ``db_migrations`` service table if it does not exist."""
+        on_cluster = on_cluster_clause(self.cluster)
+        engine = _REPLICATED_ENGINE if self.cluster else _ENGINE
+        default_kind = MigrationKind.MIGRATION
         migrator_table: SQL = f"""
         CREATE TABLE IF NOT EXISTS db_migrations {on_cluster} (
             name String,
-            kind Enum8('migration' = 1, 'baseline' = 2) DEFAULT '{MigrationKind.MIGRATION}',
+            kind Enum8('migration' = 1, 'baseline' = 2) DEFAULT '{default_kind}',
             up String,
             rollback String,
             dt DateTime64 DEFAULT now(),
@@ -196,51 +202,51 @@ class Migrator(object):
         self.ch_client.execute(migrator_table, settings=self._settings)
 
     def health_check(self) -> None:
-        for attempt in range(self._connect_retries + 1):
-            try:
-                self.ch_client.execute("SELECT 1")
-                return
-            except Exception as exc:
-                if isinstance(exc, ServerException) and exc.code == _UNKNOWN_DATABASE_CODE:
-                    db_name = self.get_db_name()
-                    raise DatabaseNotFoundError(
-                        f"Database '{db_name}' does not exist.\n"
-                        f"Create it manually before running migrations:\n"
-                        f"  CREATE DATABASE {db_name}"
-                    ) from exc
-                if attempt == self._connect_retries:
-                    raise ClickHouseServerIsNotHealthyError(f"ClickHouse server is not healthy: {exc}.") from exc
-                logger.warning(
-                    "Connection attempt %d/%d failed, retrying in %ds",
-                    attempt + 1,
-                    self._connect_retries,
-                    self._connect_retries_interval,
-                )
-                time.sleep(self._connect_retries_interval)
+        """Check the connection, retrying as configured.
+
+        Raises:
+            DatabaseNotFoundError: the database from the URL does not exist.
+            ClickHouseServerIsNotHealthyError: ClickHouse is unreachable after all retries.
+
+        """
+        wait_until_healthy(
+            self.ch_client,
+            database=self.get_db_name(),
+            retries=self._connect_retries,
+            interval=self._connect_retries_interval,
+        )
 
     def get_db_name(self) -> str:
-        db_name: str = self.database_url.rsplit("/", 1)[-1]
-        if "?" in db_name:
-            db_name = db_name[: db_name.find("?")]
-        return db_name
+        """Return the database name from the connection URL."""
+        url_path = self.database_url.rsplit("/", 1)[-1]
+        return url_path.split("?", 1)[0]
 
     def check_integrity(self, allow_dirty: bool = False) -> None:
+        """Fail if applied migration files were modified or deleted, unless ``allow_dirty`` is set.
+
+        Raises:
+            ChecksumMismatchError: an applied migration file changed and ``allow_dirty`` is not set.
+
+        """
         mismatches = self.validate_checksums()
         if not mismatches:
             return
         if allow_dirty:
             logger.warning("Checksum mismatches found but --allow-dirty is set, continuing.")
             return
-        details = "\n".join(
-            f"  {name}: file missing" if not actual else f"  {name}: stored={stored[:12]}... actual={actual[:12]}..."
-            for name, stored, actual in mismatches
-        )
+        details = "\n".join(_describe_mismatch(mismatch) for mismatch in mismatches)
         raise ChecksumMismatchError(
             f"Checksum mismatch for applied migrations:\n{details}\n\n"
-            "Run 'migrator repair' to update checksums, or use --allow-dirty to skip this check."
+            "Run 'migrator repair' to update checksums, or use --allow-dirty to skip this check.",
         )
 
-    def up(self, n: int | None = None, dry_run: bool = False, allow_dirty: bool = False, validate: bool = True) -> None:
+    def up(
+        self,
+        n: int | None = None,
+        dry_run: bool = False,
+        allow_dirty: bool = False,
+        validate: bool = True,
+    ) -> None:
         """Apply pending migrations.
 
         Args:
@@ -251,48 +257,47 @@ class Migrator(object):
 
         """
         self.check_integrity(allow_dirty=allow_dirty)
-        migrations: list[Migration] = self.get_migrations_for_apply(n)
+        migrations = self.get_migrations_for_apply(n)
         if not migrations:
             logger.info("There are no migrations to apply.")
         if validate:
             self.validate_migrations(migrations, direction=MigrationDirection.UP)
-        for i, migration in enumerate(migrations):
-            if dry_run:
-                if i > 0:
-                    click.echo("")
-                click.echo(click.style(f"-- {migration.name} (up)", fg="cyan", bold=True))
-                click.echo(migration.up.strip())
-                continue
-            checksum = compute_checksum_from_statements(
-                migration.up_statements,
-                migration.rollback_statements,
-            )
+        if dry_run:
+            echo_dry_run(migrations, MigrationDirection.UP)
+            return
+        for migration in migrations:
             self.apply_migration(migration.up_statements)
             self.save_applied_migration(
                 name=migration.name,
                 up=migration.up,
                 rollback=migration.rollback,
-                checksum=checksum,
+                checksum=migration.checksum,
             )
             logger.info("%s applied [✔]", migration.name)
 
     def rollback(self, number: int = 1, dry_run: bool = False, validate: bool = True) -> None:
-        """Rollback applied migrations in reverse order."""
-        migrations: list[Migration] = self.get_migrations_for_rollback(number=number)
+        """Rollback applied migrations in reverse order.
+
+        Baseline rows have no rollback SQL and are never rolled back.
+        """
+        migrations = self.get_migrations_for_rollback(number=number)
         if validate:
             self.validate_migrations(migrations, direction=MigrationDirection.ROLLBACK)
-        for i, migration in enumerate(migrations):
-            if dry_run:
-                if i > 0:
-                    click.echo("")
-                click.echo(click.style(f"-- {migration.name} (rollback)", fg="yellow", bold=True))
-                click.echo(migration.rollback.strip())
-                continue
+        if dry_run:
+            echo_dry_run(migrations, MigrationDirection.ROLLBACK)
+            return
+        for migration in migrations:
             self.apply_migration(migration.rollback_statements)
             self.delete_migration(name=migration.name)
             logger.info("%s rolled back [✔].", migration.name)
 
     def apply_migration(self, queries: list[SQL]) -> None:
+        """Execute queries one by one; earlier queries stay applied if a later one fails.
+
+        Raises:
+            InvalidMigrationError: ClickHouse rejected a query.
+
+        """
         for query in queries:
             try:
                 self.ch_client.execute(query)
@@ -300,56 +305,51 @@ class Migrator(object):
                 raise InvalidMigrationError(f"Query {query} raise error: {exc}") from exc
 
     def validate_statements(self, statements: list[SQL]) -> None:
-        for stmt in statements:
+        """Check each statement with ``EXPLAIN AST`` without executing it.
+
+        Raises:
+            InvalidStatementError: ClickHouse rejected a statement.
+
+        """
+        for statement in statements:
             try:
-                self.ch_client.execute(f"EXPLAIN AST {stmt}", settings=self._settings)
+                self.ch_client.execute(f"EXPLAIN AST {statement}", settings=self._settings)
             except ServerException as exc:
-                raise InvalidStatementError(f"Query:\n{stmt[:500]}\n\nClickHouse error:\n{exc}") from exc
+                preview = statement[:_STATEMENT_PREVIEW_LENGTH]
+                raise InvalidStatementError(f"Query:\n{preview}\n\nClickHouse error:\n{exc}") from exc
 
     def validate_migrations(self, migrations: list[Migration], direction: MigrationDirection) -> None:
+        """Validate the statements that ``direction`` would run for each migration.
+
+        Raises:
+            InvalidMigrationError: a statement failed validation.
+
+        """
         for migration in migrations:
-            statements = (
-                migration.up_statements if direction is MigrationDirection.UP else migration.rollback_statements
-            )
             try:
-                self.validate_statements(statements=statements)
+                self.validate_statements(statements=migration.statements(direction))
             except InvalidStatementError as exc:
                 raise InvalidMigrationError(f"Validation failed for migration {migration.name}.\n\n{exc}") from exc
 
     def get_migrations_for_apply(self, number: int | None = None) -> list[Migration]:
-        filenames: list[str] = self.get_unapplied_migration_names()
+        """Load pending migration files in apply order, at most ``number`` of them when it is set.
 
+        Raises:
+            InvalidMigrationError: a pending file cannot be read or parsed.
+
+        """
+        names = self.get_unapplied_migration_names()
         if number:
-            filenames = filenames[:number]
-
-        result: list[Migration] = []
-        for filename in filenames:
-            filepath = f"{self.migrations_dir}/{filename}"
-            try:
-                sections = load_migration_sections(filepath)
-                result.append(
-                    Migration(
-                        name=filename,
-                        up=sections.up,
-                        rollback=sections.rollback,
-                    )
-                )
-            except (MigrationParseError, InvalidMigrationError) as exc:
-                raise InvalidMigrationError(str(exc)) from exc
-
-        return result
-
-    def _get_sql_migration_filenames(self) -> list[str]:
-        try:
-            return sorted(file for file in os.listdir(self.migrations_dir) if file.endswith(".sql"))
-        except FileNotFoundError:
-            raise MigrationDirectoryNotFoundError(
-                f"Migration directory {self.migrations_dir} not found.\n"
-                "Run 'migrator init' first or specify a migrations directory with the --path flag or "
-                "the CLICKHOUSE_MIGRATE_DIR environment variable."
-            ) from None
+            names = names[:number]
+        return [load_migration(self.migrations_dir, name) for name in names]
 
     def baseline(self) -> list[str]:
+        """Record every migration file as applied without running it; returns the recorded names.
+
+        Raises:
+            BaselineError: ``db_migrations`` already has rows.
+
+        """
         if self.get_applied_migrations_names():
             raise BaselineError("Baseline requires an empty db_migrations table.")
         filenames = self._get_sql_migration_filenames()
@@ -358,67 +358,55 @@ class Migrator(object):
         return filenames
 
     def get_unapplied_migration_names(self) -> list[str]:
+        """Return names of migration files that are not in ``db_migrations``, sorted."""
         filenames = self._get_sql_migration_filenames()
-        applied_migrations: list[str] = self.get_applied_migrations_names()
-        return sorted(list(set(filenames) - set(applied_migrations)))
+        return sorted(set(filenames) - set(self.get_applied_migrations_names()))
 
     def get_applied_migrations_names(self) -> list[str]:
-        return [
-            row[0]
-            for row in self.ch_client.execute("SELECT name FROM db_migrations ORDER BY dt", settings=self._settings)
-        ]
+        """Return names from ``db_migrations``, oldest first."""
+        return [row[0] for row in self.ch_client.execute(_SELECT_APPLIED_NAMES, settings=self._settings)]
 
     def get_migrations_for_rollback(self, number: int = 1) -> list[Migration]:
-        return [
-            Migration(name=row[0], up=row[1], rollback=row[2], kind=row[3])
-            for row in self.ch_client.execute(
-                """
-                SELECT name, up, rollback, kind
-                FROM db_migrations
-                WHERE kind = %(kind)s
-                ORDER BY dt DESC
-                LIMIT %(number)s
-                """,
-                {"kind": MigrationKind.MIGRATION.value, "number": number},
-                settings=self._settings,
-            )
-        ]
+        """Load the ``number`` newest applied migrations from ``db_migrations``, newest first."""
+        rows = self.ch_client.execute(
+            _SELECT_FOR_ROLLBACK,
+            {"kind": MigrationKind.MIGRATION.value, "number": number},
+            settings=self._settings,
+        )
+        return list(itertools.starmap(Migration, rows))
 
     def save_applied_migration(self, name: str, up: SQL, rollback: SQL, checksum: str = "") -> None:
+        """Insert an applied migration into ``db_migrations``."""
         self.ch_client.execute(
-            "INSERT INTO db_migrations (name, kind, up, rollback, checksum) VALUES",
+            _INSERT_APPLIED,
             [[name, MigrationKind.MIGRATION.value, up, rollback, checksum]],
             settings=self._settings,
         )
 
     def save_baselined_migrations(self, names: list[str]) -> None:
-        base_dt = dt.datetime.now(dt.UTC).replace(tzinfo=None)
-        rows = [
-            [name, MigrationKind.BASELINE.value, "", "", base_dt + dt.timedelta(milliseconds=index), ""]
-            for index, name in enumerate(names)
-        ]
-        self.ch_client.execute(
-            "INSERT INTO db_migrations (name, kind, up, rollback, dt, checksum) VALUES",
-            rows,
-            settings=self._settings,
-        )
+        """Insert baseline rows, spaced one millisecond apart so they keep the order of ``names``."""
+        rows = []
+        applied_at = dt.datetime.now(dt.UTC).replace(tzinfo=None)
+        for name in names:
+            rows.append([name, MigrationKind.BASELINE.value, "", "", applied_at, ""])
+            applied_at += dt.timedelta(milliseconds=1)
+        self.ch_client.execute(_INSERT_BASELINED, rows, settings=self._settings)
 
     def delete_migration(self, name: str) -> None:
-        settings: ClickHouseSettings = {**self._settings, "mutations_sync": "1"}
-        self.ch_client.execute(
-            "DELETE FROM db_migrations WHERE name = %(name)s",
-            {"name": name},
-            settings=settings,
-        )
+        """Delete a migration row, waiting for the mutation so the next read does not see it."""
+        self.ch_client.execute(_DELETE_MIGRATION, {"name": name}, settings=self._mutation_settings)
 
     def validate_checksums(self) -> list[ChecksumMismatch]:
+        """Compare stored checksums of applied migrations with their files.
+
+        Rows without a stored checksum (applied before checksums existed) and baseline rows are skipped.
+
+        Raises:
+            InvalidMigrationError: an applied migration file exists but cannot be parsed.
+
+        """
         rows: list[tuple[str, str]] = self.ch_client.execute(
-            """
-            SELECT name, checksum
-            FROM db_migrations
-            WHERE kind = %(kind)s
-            ORDER BY dt
-            """,
+            _SELECT_CHECKSUMS,
             {"kind": MigrationKind.MIGRATION.value},
             settings=self._settings,
         )
@@ -426,29 +414,16 @@ class Migrator(object):
         for name, stored_checksum in rows:
             if not stored_checksum:
                 continue
-            filepath = f"{self.migrations_dir}/{name}"
-            if not os.path.exists(filepath):
-                mismatches.append(ChecksumMismatch(name, stored_checksum, ""))
-                continue
-            try:
-                sections = load_migration_sections(filepath)
-                migration = Migration(
-                    name=name,
-                    up=sections.up,
-                    rollback=sections.rollback,
-                )
-                actual_checksum = compute_checksum_from_statements(
-                    migration.up_statements,
-                    migration.rollback_statements,
-                )
-            except (MigrationParseError, InvalidMigrationError) as exc:
-                raise InvalidMigrationError(str(exc)) from exc
+            actual_checksum = self._get_file_checksum(name)
             if actual_checksum != stored_checksum:
                 mismatches.append(ChecksumMismatch(name, stored_checksum, actual_checksum))
         return mismatches
 
     def repair(self) -> list[str]:
-        """Update stored checksums to match current migration files."""
+        """Update stored checksums to match current migration files.
+
+        Migrations whose file is missing are skipped. Returns the names of repaired migrations.
+        """
         mismatches = self.validate_checksums()
         if not mismatches:
             logger.info("Nothing to repair.")
@@ -458,94 +433,54 @@ class Migrator(object):
             if not actual:
                 logger.warning("Skipping %s: file missing.", name)
                 continue
-            settings: ClickHouseSettings = {**self._settings, "mutations_sync": "1"}
             self.ch_client.execute(
-                "ALTER TABLE db_migrations UPDATE checksum = %(checksum)s WHERE name = %(name)s",
+                _UPDATE_CHECKSUM,
                 {"checksum": actual, "name": name},
-                settings=settings,
+                settings=self._mutation_settings,
             )
             repaired.append(name)
         return repaired
 
     def show_migrations(self, show_all: bool = False) -> ShowMigrationsResult:
         """Return formatted migration status and integrity warnings."""
-        applied_names = self.get_applied_migrations_names()[::-1]
-        unapplied_names = self.get_unapplied_migration_names()
-        total_applied = len(applied_names)
-        total_pending = len(unapplied_names)
-        baseline_names = {
-            row[0]
-            for row in self.ch_client.execute(
-                "SELECT name FROM db_migrations WHERE kind = %(kind)s ORDER BY dt",
-                {"kind": MigrationKind.BASELINE.value},
-                settings=self._settings,
-            )
-        }
-
-        mismatch_map: dict[str, str] = {}
-        for name, _, actual in self.validate_checksums():
-            mismatch_map[name] = "missing" if not actual else "modified"
-
-        lines: list[str] = [click.style("Applied:", bold=True)]
-        if not applied_names:
-            lines.append("  none")
-        else:
-            visible = applied_names if show_all else applied_names[:5]
-            for i, name in enumerate(visible):
-                suffixes: list[str] = []
-                if i == 0:
-                    suffixes.append("HEAD")
-                if name in baseline_names:
-                    suffixes.append("baseline")
-                status = mismatch_map.get(name, "")
-                if status:
-                    suffixes.append(status)
-
-                prefix = click.style("[X]", fg="green")
-                line = f"  {prefix} {name}"
-
-                if suffixes:
-                    suffix_text = ", ".join(suffixes)
-                    if "missing" in suffixes:
-                        color = "red"
-                    elif "modified" in suffixes:
-                        color = "yellow"
-                    else:
-                        color = "cyan"
-                    line += " " + click.style(f"({suffix_text})", fg=color)
-
-                lines.append(line)
-            if not show_all and total_applied > 5:
-                lines.append(f"  ... and {total_applied - 5} more applied")
-
-        lines.append("")
-        if unapplied_names:
-            lines.append(click.style("Pending:", bold=True))
-            for name in unapplied_names:
-                prefix = click.style("[ ]", dim=True)
-                lines.append(f"  {prefix} {name}")
-        else:
-            lines.append(click.style("Pending:", bold=True) + " none")
-
-        lines.append("")
-        lines.append(
-            click.style(f"Applied: {total_applied}", fg="green")
-            + " | "
-            + click.style(f"Pending: {total_pending}", fg="yellow")
+        problems = {mismatch.name: MODIFIED if mismatch.actual else MISSING for mismatch in self.validate_checksums()}
+        baseline_rows = self.ch_client.execute(
+            _SELECT_NAMES_BY_KIND,
+            {"kind": MigrationKind.BASELINE.value},
+            settings=self._settings,
         )
+        status = MigrationStatus(
+            applied=list(reversed(self.get_applied_migrations_names())),
+            pending=self.get_unapplied_migration_names(),
+            baseline=frozenset(row[0] for row in baseline_rows),
+            problems=problems,
+        )
+        return ShowMigrationsResult(render_status(status, show_all=show_all), render_integrity_warning(problems))
 
-        warning = ""
-        if mismatch_map:
-            count = len(mismatch_map)
-            issue_word = "issue" if count == 1 else "issues"
-            issue_lines: list[str] = [
-                click.style(f"WARNING: {count} integrity {issue_word} found", fg="yellow", bold=True)
-            ]
-            for name, status in mismatch_map.items():
-                if status == "missing":
-                    issue_lines.append("  " + click.style(f"{name}: migration file missing", fg="red"))
-                else:
-                    issue_lines.append("  " + click.style(f"{name}: checksum mismatch", fg="yellow"))
-            warning = "\n".join(issue_lines)
+    @property
+    def _mutation_settings(self) -> ClickHouseSettings:
+        return {**self._settings, "mutations_sync": "1"}
 
-        return ShowMigrationsResult("\n".join(lines), warning)
+    def _get_sql_migration_filenames(self) -> list[str]:
+        try:
+            entries = [path.name for path in Path(self.migrations_dir).iterdir()]
+        except FileNotFoundError:
+            raise MigrationDirectoryNotFoundError(
+                f"Migration directory {self.migrations_dir} not found.\n"
+                "Run 'migrator init' first or specify a migrations directory with the --path flag or "
+                "the CLICKHOUSE_MIGRATE_DIR environment variable.",
+            ) from None
+        return sorted(entry for entry in entries if entry.endswith(".sql"))
+
+    def _get_file_checksum(self, name: str) -> str:
+        if not Path(self.migrations_dir, name).exists():
+            return ""
+        return load_migration(self.migrations_dir, name).checksum
+
+
+def _describe_mismatch(mismatch: ChecksumMismatch) -> str:
+    if not mismatch.actual:
+        return f"  {mismatch.name}: file missing"
+    stored = mismatch.stored[:CHECKSUM_PREVIEW_LENGTH]
+    actual = mismatch.actual[:CHECKSUM_PREVIEW_LENGTH]
+    return f"  {mismatch.name}: stored={stored}... actual={actual}..."

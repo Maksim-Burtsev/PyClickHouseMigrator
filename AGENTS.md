@@ -19,10 +19,11 @@ Setup: `uv sync --dev`. Always run tools through `uv run`.
 
 | Task | Command |
 |---|---|
-| Lint | `uv run ruff check .` |
+| Lint (ruff) | `uv run ruff check .` |
+| Lint (wemake-python-styleguide) | `uv run flake8 .` |
 | Format | `uv run ruff format .` (CI runs `uv run ruff format --check .`) |
-| Types | `uv run mypy py_clickhouse_migrator/` |
-| All CI lint checks | `make lint` (ruff, format, mypy, no-comments check) |
+| Types | `uv run mypy` (package, tests, and scripts) |
+| All CI lint checks | `make lint` (ruff, format, flake8, mypy, no-comments check) |
 | Start test ClickHouse | `docker compose -f docker-compose.test.yml up -d --wait` |
 | Tests | `uv run pytest` |
 | Single test | `uv run pytest tests/test_migrator.py::test_init_base -v` |
@@ -40,15 +41,26 @@ Setup: `uv sync --dev`. Always run tools through `uv run`.
 
 ```text
 py_clickhouse_migrator/
-  cli.py               click entry point; SafeGroup turns known errors into "Error: ..." and exit code 1
-  migrator.py          Migrator: db_migrations table, up / rollback / baseline / repair / show, checksum checks
+  cli/                 click CLI (`migrator`)
+    app.py             command group, global options; SafeGroup prints known errors as "Error: ..." with exit 1
+    migrate.py         init, new, up, rollback, baseline
+    maintenance.py     show, repair, force-unlock, lock-info
+    options.py         CliSettings (global options), shared option groups, lock handling
+  migrator.py          Migrator facade: db_migrations table, up / rollback / baseline / repair / show
+  migration.py         Migration model, loading one migration file
+  reports.py           `show` report, integrity warning, dry-run output
   migration_parser.py  splits a .sql file into up/down sections and -- @stmt blocks
+  text.py              line helpers used by the parser
   checksum.py          SHA-256 over normalized statement blocks
   lock.py              MigrationLock: advisory lock stored in _migrations_lock (ReplacingMergeTree)
+  clickhouse.py        shared ClickHouse settings, identifier validation, connection health check
   errors.py            exception types
   __init__.py          public API, re-exported via __all__
-tests/                 pytest suite; conftest.py has DB fixtures, helpers.py builds migration files
-scripts/               wait_cluster_ready.py for the cluster CI job
+tests/                 pytest suite
+  conftest.py          ClickHouse fixtures
+  migration_files.py   create and rewrite migration files
+  queries.py           inspect and clean up the test database
+scripts/               wait_cluster_ready.py for the cluster CI job, check_no_comments.py for the comment ban
 docs/                  documentation site (zensical, configured in mkdocs.yml)
 ```
 
@@ -67,7 +79,8 @@ maintainer decision and a major version bump.
   all SQL inside `-- @stmt` blocks; each block is executed as one query. Never split SQL on `;`.
 - **CLI surface.** Command names, options, `CLICKHOUSE_MIGRATE_*` environment variables, exit codes,
   and output that CI pipelines parse.
-- **Python API.** Everything in `py_clickhouse_migrator.__all__` and in `docs/python-api.md`.
+- **Python API.** Everything in `py_clickhouse_migrator.__all__` and in `docs/python-api.md`, including
+  the public methods of `Migrator` and `MigrationLock` with their parameter names and positions.
 
 ## No comments
 
@@ -91,12 +104,32 @@ comment, including section headers, commented-out code, and tool directives such
   service table passes `self._settings` (`insert_quorum`, `select_sequential_consistency`). Keep new
   queries consistent with that, and cover cluster behavior in `tests/test_cluster.py`.
 - **Errors.** Raise a specific exception from `errors.py`. If the CLI should print it as a clean
-  message instead of a traceback, add it to `_HANDLED_EXCEPTIONS` in `cli.py`.
+  message instead of a traceback, add it to `_HANDLED_EXCEPTIONS` in `cli/app.py`.
 - **Output.** Results for the user go through `click.echo`; diagnostics go through the
   `py_clickhouse_migrator` logger. `--quiet` silences logs only, so dry-run SQL must use `click.echo`.
-- **Typing.** Every function is fully annotated; mypy runs in strict mode.
-- **Style.** Ruff with line length 120; configuration lives in `pyproject.toml`. Fix lint findings
-  in the code instead of adding ignores.
+- **Typing.** Every function is fully annotated; mypy runs in strict mode with extra error codes over
+  the package, tests, and scripts.
+
+## Linters
+
+The rule set is deliberately strict: ruff with the rule selection of
+[wemake-python-styleguide](https://github.com/wemake-services/wemake-python-styleguide)'s own config
+(`pyproject.toml`, line length 120), plus wemake-python-styleguide itself through flake8 (`setup.cfg`,
+WPS rules only). Violations are explained at
+https://wemake-python-styleguide.readthedocs.io/en/latest/pages/usage/violations/index.html.
+
+- Fix the code, not the config. Never add ignores, `noqa`, or new per-file exemptions without the
+  maintainer's approval.
+- The existing per-file exemptions exist only where a rule would force a breaking change to the
+  public API (too many methods or arguments on `Migrator` and `MigrationLock`, the `n` and `content`
+  parameter names, positional boolean parameters, `__all__`, nine exceptions in `errors.py`), where
+  identifiers must be interpolated into SQL (`lock.py`, S608), and the test exemptions from wemake's
+  reference config (asserts, module size, arguments, repeated strings).
+- Typical fixes: split long functions and classes by responsibility, move magic numbers to named
+  constants, extract intermediate variables from complex lines and f-strings, use pathlib, and name
+  variables precisely (`result`, `data`, `value`, `item`, `info` are rejected).
+- Keep modules to seven functions and classes at most (WPS202): add a cohesive module instead of
+  growing an existing one.
 - **Dependencies.** Do not add runtime dependencies. Manage dev dependencies with `uv add --dev`;
   never edit `uv.lock` by hand.
 
@@ -105,7 +138,9 @@ comment, including section headers, commented-out code, and tool directives such
 - Every behavior change comes with a test.
 - Prefer a real ClickHouse over mocks whenever SQL is involved. Mocks are for CLI wiring, retries,
   and failure paths.
-- Create migration files through `tests/helpers.py` (`create_test_migration`), not by hand.
+- Create and edit migration files through `tests/migration_files.py` (`create_test_migration`,
+  `write_test_migration`), and inspect or clean up ClickHouse through `tests/queries.py`.
+- Every test and fixture has a one-line docstring that states the protected behavior.
 - Tests that create tables or rows must remove them at the end; follow the fixtures in `conftest.py`.
 
 ## Docs and changelog

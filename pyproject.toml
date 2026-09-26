@@ -60,6 +60,7 @@ dev = [
     "ruff>=0.15",
     "pre-commit>=4.0",
     "mypy>=1.19.1",
+    "wemake-python-styleguide>=1.8.1",
 ]
 docs = [
     "zensical==0.0.63",
@@ -72,65 +73,109 @@ build-backend = "hatchling.build"
 [tool.ruff]
 line-length = 120
 target-version = "py311"
-
-[tool.ruff.lint]
-select = [
-  "E",  # pycodestyle Error
-  "F",  # Pyflakes
-  "B",  # flake8-bugbear
-  "W",  # pycodestyle Warning
-  "I",  # isort
-  "N",  # pep8-naming
-  "D",  # pydocstyle
-  "PL", # Pylint
-]
-ignore = [
-  "D107", # Missing docstring in `__init__`
-  "D203", # 1 blank line required before class docstring
-  "D212", # Multi-line docstring summary should start at the first line
-  "F403",
-  "F405",
-  "D102",
-  "D100",
-  "D101",
-  "D103",
-  "I001",
-  "PLW0603",
-  "PLR0913",
-  "PLR0915",
-  "PLR0911",
-  "PLR0912",
-  "B008",
-  "D202",
-  "D213",
-  "D105",
-  "D400",
-  "D415",
-  "D106",
-  "PLR2004",
-  "PLW2901",
-  "PLR1704",
-  "D104",
-  "B905",
-]
-dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
-per-file-ignores = {}
+preview = true
 
 [tool.ruff.format]
 line-ending = "auto"
 
+[tool.ruff.lint]
+select = [
+  "A",    # flake8-builtins
+  "B",    # flake8-bugbear
+  "C4",   # flake8-comprehensions
+  "C90",  # mccabe
+  "COM",  # flake8-commas
+  "D",    # pydocstyle
+  "DTZ",  # flake8-datetimez
+  "E",    # pycodestyle errors
+  "ERA",  # flake8-eradicate
+  "EXE",  # flake8-executable
+  "F",    # pyflakes
+  "FA",   # flake8-future-annotations
+  "FBT",  # flake8-boolean-trap
+  "FLY",  # flynt
+  "FURB", # refurb
+  "G",    # flake8-logging-format
+  "I",    # isort
+  "ICN",  # flake8-import-conventions
+  "ISC",  # flake8-implicit-str-concat
+  "LOG",  # flake8-logging
+  "N",    # pep8-naming
+  "PERF", # perflint
+  "PIE",  # flake8-pie
+  "PL",   # pylint
+  "PT",   # flake8-pytest-style
+  "PTH",  # flake8-use-pathlib
+  "Q",    # flake8-quotes
+  "RET",  # flake8-return
+  "RSE",  # flake8-raise
+  "RUF",  # ruff-specific rules
+  "S",    # flake8-bandit
+  "SIM",  # flake8-simplify
+  "SLF",  # flake8-self
+  "SLOT", # flake8-slots
+  "T100", # flake8-debugger
+  "TRY",  # tryceratops
+  "UP",   # pyupgrade
+  "W",    # pycodestyle warnings
+  "YTT",  # flake8-2020
+]
+ignore = [
+  "D100",    # module docstrings are optional
+  "D104",    # package docstrings are optional
+  "D106",    # nested class docstrings are optional
+  "D203",    # conflicts with D211
+  "D212",    # conflicts with D213
+  "D401",    # docstring mood is not enforced
+  "D404",    # docstrings may start with "This"
+  "D405",    # section name capitalization is not enforced
+  "D418",    # @overload may have a docstring
+  "ISC001",  # conflicts with ruff format
+  "ISC003",  # conflicts with WPS326 (implicit string concatenation)
+  "PLR09",   # complexity limits are enforced by wemake-python-styleguide
+  "PLR2004", # magic numbers are enforced by WPS432
+  "PLR6301", # methods may skip @staticmethod
+  "TRY003",  # exceptions take their message at the raise site
+]
+external = ["WPS"]
+
+[tool.ruff.lint.per-file-ignores]
+"py_clickhouse_migrator/lock.py" = ["S608"]
+"py_clickhouse_migrator/migrator.py" = ["FBT001", "FBT002"]
+"tests/**/*.py" = ["S101"]
+
+[tool.ruff.lint.flake8-import-conventions]
+aliases = { datetime = "dt" }
+banned-from = ["ast", "datetime"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 6
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
 [tool.mypy]
+files = ["py_clickhouse_migrator", "tests", "scripts"]
 strict = true
-warn_return_any = true
-warn_unused_configs = true
+warn_unreachable = true
+strict_equality_for_none = true
+enable_error_code = [
+  "deprecated",
+  "exhaustive-match",
+  "ignore-without-code",
+  "mutable-override",
+  "possibly-undefined",
+  "redundant-expr",
+  "redundant-self",
+  "truthy-bool",
+  "truthy-iterable",
+  "unimported-reveal",
+  "unused-awaitable",
+]
 
 [[tool.mypy.overrides]]
 module = "clickhouse_driver.*"
 ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "tests.*"
-disable_error_code = ["untyped-decorator"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
