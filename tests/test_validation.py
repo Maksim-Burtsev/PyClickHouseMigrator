@@ -12,15 +12,12 @@ from py_clickhouse_migrator.migrator import Migrator, create_migration_file
 FAKE_URL = "clickhouse://default@localhost:9000/default"
 
 
-def _make_migrator(**kwargs: object) -> Migrator:
+def _make_migrator(cluster: str) -> Migrator:
     with (
         patch("py_clickhouse_migrator.migrator.Client.from_url", return_value=MagicMock()),
         patch.object(Migrator, "check_migrations_table"),
     ):
-        return Migrator(database_url=FAKE_URL, **kwargs)  # type: ignore[arg-type]
-
-
-# --- CLI IntRange validation ---
+        return Migrator(database_url=FAKE_URL, cluster=cluster)
 
 
 @pytest.mark.parametrize(
@@ -65,9 +62,6 @@ def test_cli_rejects_negative_connect_params(option: str, value: str) -> None:
     assert result.exit_code != 0
 
 
-# --- cluster name validation ---
-
-
 @pytest.mark.parametrize(
     "cluster",
     [
@@ -93,9 +87,6 @@ def test_rejects_invalid_cluster_name(cluster: str) -> None:
 def test_accepts_valid_cluster_name(cluster: str) -> None:
     m = _make_migrator(cluster=cluster)
     assert m.cluster == cluster
-
-
-# --- migration name validation ---
 
 
 def test_rejects_invalid_migration_name() -> None:

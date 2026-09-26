@@ -39,6 +39,18 @@ decision and a major version bump.
 - **Dependencies.** `click` and `clickhouse-driver` are the only runtime dependencies. Add dev
   dependencies with `uv add --dev`.
 
+## No comments
+
+Python code (package, tests, scripts) explains itself through names, types, small functions, named
+constants, and docstrings, and contains no `#` comments. `scripts/check_no_comments.py` fails
+`make lint`, CI, and pre-commit on any comment token, including tool directives such as `# noqa`,
+`# type: ignore`, and `# pragma: no cover`.
+
+- The *why* behind code goes in a docstring on the module, class, function, or test; the *why*
+  behind a change goes in the commit message.
+- Fix a lint or type error at its cause. If a suppression looks unavoidable, stop and ask the
+  maintainer.
+
 ## Code conventions
 
 - **SQL safety.** Database and cluster names are interpolated into SQL, so validate them as identifiers

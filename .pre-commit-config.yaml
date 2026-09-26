@@ -21,3 +21,11 @@ repos:
           - click
           - clickhouse-driver
           - python-dotenv
+
+  - repo: local
+    hooks:
+      - id: no-comments
+        name: no comments in Python code
+        entry: python scripts/check_no_comments.py
+        language: python
+        types: [python]

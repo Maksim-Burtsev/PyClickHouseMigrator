@@ -55,7 +55,6 @@ def test_db_migrations_table_creation(ch_client: Client, test_db: str) -> None:
     assert ch_client.execute("SHOW CREATE TABLE db_migrations")[0][0] == expected_schema
     assert not ch_client.execute("SELECT * FROM db_migrations")
 
-    # clean
     ch_client.execute("DROP TABLE IF EXISTS db_migrations")
 
 
@@ -123,7 +122,6 @@ def test_apply_migration_one_query(migrator: Migrator, ch_client: Client) -> Non
     assert table_exists(ch_client, "test_table")
     assert ch_client.execute("DESCRIBE TABLE test_table")[0][:2] == ("id", "Int32")
 
-    # clean
     ch_client.execute("DROP TABLE IF EXISTS test_table")
 
 
@@ -153,7 +151,6 @@ def test_apply_migration_multiquery(migrator: Migrator, ch_client: Client) -> No
         ("744aa7d7-568b-48f2-80a1-ef0aaf18fc1b",),
     ]
 
-    # clean
     ch_client.execute("DROP TABLE IF EXISTS test_table_int_id")
     ch_client.execute("DROP TABLE IF EXISTS test_table_str_id")
 
@@ -246,7 +243,7 @@ def test_get_few_migrations_for_apply_with_number(migrator: Migrator, migrator_i
     assert os.path.exists(f"{DEFAULT_MIGRATIONS_DIR}/{migration_3}")
     assert not ch_client.execute(f"SELECT * FROM db_migrations WHERE name='{migration_3}'")
 
-    assert len(migrator.get_migrations_for_apply()) == 3  # get migrations for apply without number
+    assert len(migrator.get_migrations_for_apply()) == 3
 
 
 def test_get_migrations_for_rollback(
@@ -279,7 +276,7 @@ def test_get_migrations_for_rollback(
         ch_client.execute(f"SELECT count() FROM db_migrations WHERE name='{test_tables_from_migration[0]}'")[0][0] == 1
     )
     all_migrations_for_rollback: list[Migration] = migrator.get_migrations_for_rollback()
-    assert len(all_migrations_for_rollback) == 1  # by default 1
+    assert len(all_migrations_for_rollback) == 1
     assert all_migrations_for_rollback[0].name == test_tables_from_migration[2]
     assert all_migrations_for_rollback[0].up == expected_up_3
     assert all_migrations_for_rollback[0].rollback == "-- @stmt\nDROP TABLE IF EXISTS test_table_3"
@@ -437,7 +434,6 @@ def test_up_one_query(migrator: Migrator, migrator_init: None, ch_client: Client
     assert table_exists(ch_client, "test_table")
     assert ch_client.execute("DESCRIBE TABLE test_table")[0][:2] == ("id", "Int32")
 
-    # clean
     ch_client.execute("DROP TABLE IF EXISTS test_table")
 
 
@@ -466,7 +462,6 @@ def test_up_multiquery(migrator: Migrator, migrator_init: None, ch_client: Clien
     assert ch_client.execute("DESCRIBE TABLE test_table_1")[0][:2] == ("id", "Int32")
     assert ch_client.execute("DESCRIBE TABLE test_table_2")[0][:2] == ("id", "String")
 
-    # clean
     ch_client.execute("DROP TABLE IF EXISTS test_table_1")
     ch_client.execute("DROP TABLE IF EXISTS test_table_2")
 
@@ -495,7 +490,6 @@ def test_up_multiquery_with_line_breakes(migrator: Migrator, migrator_init: None
     assert ch_client.execute("DESCRIBE TABLE test_table_1")[0][:2] == ("id", "Int32")
     assert ch_client.execute("DESCRIBE TABLE test_table_2")[0][:2] == ("id", "String")
 
-    # clean
     ch_client.execute("DROP TABLE IF EXISTS test_table_1")
     ch_client.execute("DROP TABLE IF EXISTS test_table_2")
 
@@ -528,7 +522,6 @@ def test_up_multiply_files(migrator: Migrator, migrator_init: None, ch_client: C
 
     assert sorted(migrator.get_applied_migrations_names()) == sorted([filename_1, filename_2])
 
-    # clean
     ch_client.execute("DROP TABLE IF EXISTS test_table_1")
     ch_client.execute("DROP TABLE IF EXISTS test_table_2")
 
@@ -591,7 +584,6 @@ def test_rollback_multiquery_migration(migrator: Migrator, test_table_from_migra
     assert ch_client.execute(f"SELECT count() FROM db_migrations WHERE name='{filename}'")[0][0] == 0
     assert not table_exists(ch_client, "test_table_1")
 
-    # check inserted from rollback values
     assert [row[0] for row in ch_client.execute("SELECT id FROM test_table")] == [1, 2, 3]
 
 
@@ -613,7 +605,6 @@ def test_save_applied_migration(migrator: Migrator, ch_client: Client, migrator_
     assert row[2] == "DROP TABLE IF EXISTS test_table;"
     assert row[3] == "abc123"
 
-    # clean
     ch_client.execute("DELETE FROM db_migrations WHERE name='test'")
 
 
@@ -660,7 +651,6 @@ def test_up_dry_run_does_not_apply(migrator: Migrator, migrator_init: None, ch_c
     assert not table_exists(ch_client, "test_table")
     assert ch_client.execute("SELECT count() FROM db_migrations")[0][0] == 0
 
-    # migration should still be unapplied
     assert len(migrator.get_unapplied_migration_names()) == 1
 
 
@@ -795,10 +785,9 @@ def test_new_migration_filename_format(migrator_init: None) -> None:
     filepath = create_migration_file(name="test")
     filename = os.path.basename(filepath)
     assert MIGRATION_FILENAME_REGEX.match(filename)
-    # 14 digits before _
-    stem = filename.split("_", maxsplit=1)[0]
-    assert len(stem) == 14
-    assert stem.isdigit()
+    timestamp = filename.split("_", maxsplit=1)[0]
+    assert len(timestamp) == 14
+    assert timestamp.isdigit()
 
 
 def test_new_migration_filename_with_name(migrator_init: None) -> None:
@@ -837,7 +826,6 @@ def test_show_migrations_default_limits_applied(migrator: Migrator, migrator_ini
     assert "Applied: 7 | Pending: 0" in plain
     assert warning == ""
 
-    # clean
     for i in range(7):
         ch_client.execute(f"DROP TABLE IF EXISTS t_{i}")
 
@@ -861,7 +849,6 @@ def test_show_migrations_all_flag(migrator: Migrator, migrator_init: None, ch_cl
     assert "Applied: 7" in plain
     assert warning == ""
 
-    # clean
     for i in range(7):
         ch_client.execute(f"DROP TABLE IF EXISTS t_{i}")
 
