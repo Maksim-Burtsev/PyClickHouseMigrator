@@ -46,10 +46,22 @@ constants, and docstrings, and contains no `#` comments. `scripts/check_no_comme
 `make lint`, CI, and pre-commit on any comment token, including tool directives such as `# noqa`,
 `# type: ignore`, and `# pragma: no cover`.
 
-- The *why* behind code goes in a docstring on the module, class, function, or test; the *why*
-  behind a change goes in the commit message.
-- Fix a lint or type error at its cause. If a suppression looks unavoidable, stop and ask the
-  maintainer.
+The *why* behind code goes in a docstring on the module, class, function, or test; the *why* behind
+a change goes in the commit message.
+
+## Linters
+
+`make lint` runs ruff with the rule set of wemake-python-styleguide's own config (`pyproject.toml`),
+wemake-python-styleguide itself through flake8 (WPS rules only, `setup.cfg`), strict mypy over the
+package, tests, and scripts, and the comment check. Every WPS code is explained at
+https://wemake-python-styleguide.readthedocs.io/en/latest/pages/usage/violations/index.html.
+
+- Fix the code, not the config. The global ignores and the test exemptions are wemake's reference
+  ones; the other per-file exemptions keep the public API from the Invariants unchanged, plus S608 in
+  `lock.py`, which interpolates validated identifiers into SQL. A new ignore or exemption needs the
+  maintainer's approval: if one looks unavoidable, stop and ask.
+- Fix by restructuring: split a long function or class by responsibility, and when a module reaches
+  the member limit (WPS202), move a cohesive part into a new module.
 
 ## Code conventions
 

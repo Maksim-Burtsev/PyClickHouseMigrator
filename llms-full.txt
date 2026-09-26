@@ -444,9 +444,12 @@ Public exports include `Migrator`, `MigrationLock`, lock errors, migration error
 
 ## Source map
 
-- `py_clickhouse_migrator/cli.py` — Click-based CLI commands.
-- `py_clickhouse_migrator/migrator.py` — core migration logic, state table, baseline, checksum validation, status output.
+- `py_clickhouse_migrator/cli/` — Click-based CLI: `app.py` (command group, global options), `migrate.py` (`init`, `new`, `up`, `rollback`, `baseline`), `maintenance.py` (`show`, `repair`, `force-unlock`, `lock-info`), `options.py` (shared settings and option groups).
+- `py_clickhouse_migrator/migrator.py` — `Migrator`: state table, apply, rollback, baseline, checksum validation.
+- `py_clickhouse_migrator/migration.py` — migration model and loading a migration file.
+- `py_clickhouse_migrator/reports.py` — status report, integrity warnings, and dry-run output.
 - `py_clickhouse_migrator/migration_parser.py` — SQL migration parser for `-- migrator:up`, `-- migrator:down`, and `-- @stmt` blocks.
+- `py_clickhouse_migrator/clickhouse.py` — shared ClickHouse settings, identifier validation, and connection health check.
 - `py_clickhouse_migrator/checksum.py` — checksum normalization and SHA-256 computation.
 - `py_clickhouse_migrator/lock.py` — advisory lock implementation.
 - `py_clickhouse_migrator/errors.py` — custom exception classes.

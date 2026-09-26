@@ -5,7 +5,8 @@
 ## Checklist
 
 - [ ] `uv run ruff check . && uv run ruff format --check .`
-- [ ] `uv run mypy py_clickhouse_migrator/`
+- [ ] `uv run flake8 .` (wemake-python-styleguide)
+- [ ] `uv run mypy`
 - [ ] `uv run python scripts/check_no_comments.py`
 - [ ] `uv run pytest` passes against a live ClickHouse
 - [ ] Tests added or updated for the behavior change

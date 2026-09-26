@@ -29,8 +29,10 @@ jobs:
         run: uv run ruff check .
       - name: ruff format
         run: uv run ruff format --check .
+      - name: wemake-python-styleguide
+        run: uv run flake8 .
       - name: mypy
-        run: uv run mypy py_clickhouse_migrator/
+        run: uv run mypy
       - name: no comments
         run: uv run python scripts/check_no_comments.py
 
