@@ -17,8 +17,7 @@ from py_clickhouse_migrator.migrator import (
 from py_clickhouse_migrator.cli import main
 from tests.helpers import create_test_migration, render_test_migration_content, render_test_migration_section
 
-
-# --- normalize_content & compute_checksum ---
+SHA256_HEX_DIGEST_LENGTH = 64
 
 
 def test_normalize_strips_trailing_whitespace() -> None:
@@ -99,9 +98,6 @@ def test_checksum_no_collision_on_concatenation() -> None:
     )
 
 
-# --- checksum save ---
-
-
 def test_checksum_saved_on_apply(migrator: Migrator, migrator_init: None, ch_client: Client) -> None:
     """After up(), db_migrations should contain a non-empty checksum."""
     create_test_migration(
@@ -113,13 +109,9 @@ def test_checksum_saved_on_apply(migrator: Migrator, migrator_init: None, ch_cli
 
     row = ch_client.execute("SELECT checksum FROM db_migrations LIMIT 1")[0]
     assert row[0] != ""
-    assert len(row[0]) == 64  # SHA-256 hex length
+    assert len(row[0]) == SHA256_HEX_DIGEST_LENGTH
 
-    # clean
     ch_client.execute("DROP TABLE IF EXISTS test_cksum")
-
-
-# --- checksum validation ---
 
 
 def test_up_fails_on_checksum_mismatch(migrator: Migrator, migrator_init: None, ch_client: Client) -> None:
@@ -131,7 +123,6 @@ def test_up_fails_on_checksum_mismatch(migrator: Migrator, migrator_init: None, 
     )
     migrator.up()
 
-    # modify the applied migration file
     filepath = f"{DEFAULT_MIGRATIONS_DIR}/{filename}"
     with open(filepath, "w") as f:
         f.write(
@@ -144,7 +135,6 @@ def test_up_fails_on_checksum_mismatch(migrator: Migrator, migrator_init: None, 
     with pytest.raises(ChecksumMismatchError, match="Checksum mismatch"):
         migrator.up()
 
-    # clean
     ch_client.execute("DROP TABLE IF EXISTS test_mismatch")
 
 
@@ -157,7 +147,6 @@ def test_up_allow_dirty_skips_validation(migrator: Migrator, migrator_init: None
     )
     migrator.up()
 
-    # modify the applied migration file
     filepath = f"{DEFAULT_MIGRATIONS_DIR}/{filename}"
     with open(filepath, "w") as f:
         f.write(
@@ -167,30 +156,26 @@ def test_up_allow_dirty_skips_validation(migrator: Migrator, migrator_init: None
             )
         )
 
-    migrator.up(allow_dirty=True)  # should not raise
+    migrator.up(allow_dirty=True)
 
-    # clean
     ch_client.execute("DROP TABLE IF EXISTS test_dirty")
 
 
 def test_up_skips_validation_for_empty_checksum(migrator: Migrator, migrator_init: None, ch_client: Client) -> None:
     """Legacy migrations without checksum should not trigger validation errors."""
-    # insert a legacy migration without checksum
     ch_client.execute(
         "INSERT INTO db_migrations (name, up, rollback, checksum) VALUES",
         [["legacy.sql", "SELECT 1", "SELECT 1", ""]],
     )
 
-    # create a new pending migration
     create_test_migration(
         name="test_after_legacy",
         up="CREATE TABLE IF NOT EXISTS test_legacy (id Int32) Engine=MergeTree() ORDER BY id;",
         rollback="DROP TABLE IF EXISTS test_legacy",
     )
 
-    migrator.up()  # should not raise
+    migrator.up()
 
-    # clean
     ch_client.execute("DROP TABLE IF EXISTS test_legacy")
 
 
@@ -203,15 +188,13 @@ def test_validate_detects_missing_file(migrator: Migrator, migrator_init: None, 
     )
     migrator.up()
 
-    # delete the file
     os.remove(f"{DEFAULT_MIGRATIONS_DIR}/{filename}")
 
     mismatches = migrator.validate_checksums()
     assert len(mismatches) == 1
     assert mismatches[0].name == filename
-    assert mismatches[0].actual == ""  # empty actual = missing
+    assert mismatches[0].actual == ""
 
-    # clean
     ch_client.execute("DROP TABLE IF EXISTS test_missing")
 
 
@@ -226,7 +209,6 @@ def test_validate_passes_when_no_changes(migrator: Migrator, migrator_init: None
 
     assert migrator.validate_checksums() == []
 
-    # clean
     ch_client.execute("DROP TABLE IF EXISTS test_ok")
 
 
@@ -265,11 +247,11 @@ def test_validate_ignores_baselined_missing_file(migrator: Migrator, migrator_in
     assert migrator.validate_checksums() == []
 
 
-# --- repair ---
-
-
 def test_repair_updates_checksum(migrator: Migrator, migrator_init: None, ch_client: Client) -> None:
-    """repair() should update checksum in DB after file modification."""
+    """repair() should update checksum in DB after file modification.
+
+    The update runs with mutations_sync=1, so the next validation sees it without waiting.
+    """
     filename = create_test_migration(
         name="test_repair",
         up="CREATE TABLE IF NOT EXISTS test_repair (id Int32) Engine=MergeTree() ORDER BY id;",
@@ -277,7 +259,6 @@ def test_repair_updates_checksum(migrator: Migrator, migrator_init: None, ch_cli
     )
     migrator.up()
 
-    # modify file
     filepath = f"{DEFAULT_MIGRATIONS_DIR}/{filename}"
     with open(filepath, "w") as f:
         f.write(
@@ -292,10 +273,8 @@ def test_repair_updates_checksum(migrator: Migrator, migrator_init: None, ch_cli
     repaired = migrator.repair()
     assert repaired == [filename]
 
-    # mutations_sync=1 ensures immediate visibility
     assert migrator.validate_checksums() == []
 
-    # clean
     ch_client.execute("DROP TABLE IF EXISTS test_repair")
 
 
@@ -310,7 +289,6 @@ def test_repair_nothing_to_fix(migrator: Migrator, migrator_init: None, ch_clien
 
     assert migrator.repair() == []
 
-    # clean
     ch_client.execute("DROP TABLE IF EXISTS test_repair_ok")
 
 
@@ -346,13 +324,9 @@ def test_repair_skips_missing_files(migrator: Migrator, migrator_init: None, ch_
     os.remove(f"{DEFAULT_MIGRATIONS_DIR}/{filename}")
 
     repaired = migrator.repair()
-    assert repaired == []  # nothing repaired, file was missing
+    assert repaired == []
 
-    # clean
     ch_client.execute("DROP TABLE IF EXISTS test_repair_missing")
-
-
-# --- show with checksum status ---
 
 
 def test_show_clean_output(migrator: Migrator, migrator_init: None, ch_client: Client) -> None:
@@ -372,7 +346,6 @@ def test_show_clean_output(migrator: Migrator, migrator_init: None, ch_client: C
     assert "WARNING" not in plain
     assert warning == ""
 
-    # clean
     ch_client.execute("DROP TABLE IF EXISTS test_clean")
 
 
@@ -402,7 +375,6 @@ def test_show_modified_suffix_and_warning(migrator: Migrator, migrator_init: Non
     )
     migrator.up()
 
-    # modify file
     filepath = f"{DEFAULT_MIGRATIONS_DIR}/{filename}"
     with open(filepath, "w") as f:
         f.write(
@@ -420,7 +392,6 @@ def test_show_modified_suffix_and_warning(migrator: Migrator, migrator_init: Non
     assert "WARNING: 1 integrity issue found" in plain_warning
     assert f"{filename}: checksum mismatch" in plain_warning
 
-    # clean
     ch_client.execute("DROP TABLE IF EXISTS test_show_mod")
 
 
@@ -443,7 +414,6 @@ def test_show_missing_suffix_and_warning(migrator: Migrator, migrator_init: None
     assert "WARNING: 1 integrity issue found" in plain_warning
     assert f"{filename}: migration file missing" in plain_warning
 
-    # clean
     ch_client.execute("DROP TABLE IF EXISTS test_show_miss")
 
 
@@ -462,7 +432,6 @@ def test_show_head_without_issues(migrator: Migrator, migrator_init: None, ch_cl
     assert "(HEAD)" in plain
     assert "(HEAD," not in plain
 
-    # clean
     ch_client.execute("DROP TABLE IF EXISTS test_head_ok")
 
 
@@ -476,7 +445,6 @@ def test_show_truncated_list_still_warns(migrator: Migrator, migrator_init: None
         )
     migrator.up()
 
-    # modify the oldest migration (will be hidden beyond top 5)
     applied = migrator.get_applied_migrations_names()
     oldest = applied[0]
     filepath = f"{DEFAULT_MIGRATIONS_DIR}/{oldest}"
@@ -496,7 +464,6 @@ def test_show_truncated_list_still_warns(migrator: Migrator, migrator_init: None
     assert "WARNING: 1 integrity issue found" in plain_warning
     assert f"{oldest}: checksum mismatch" in plain_warning
 
-    # clean
     for i in range(7):
         ch_client.execute(f"DROP TABLE IF EXISTS t_{i}")
 
@@ -515,7 +482,6 @@ def test_show_warning_plural(migrator: Migrator, migrator_init: None, ch_client:
     )
     migrator.up()
 
-    # modify first file
     filepath1 = f"{DEFAULT_MIGRATIONS_DIR}/{filename1}"
     with open(filepath1, "w") as f:
         f.write(
@@ -524,7 +490,6 @@ def test_show_warning_plural(migrator: Migrator, migrator_init: None, ch_client:
                 rollback="DROP TABLE IF EXISTS test_plural_1",
             )
         )
-    # delete second file
     os.remove(f"{DEFAULT_MIGRATIONS_DIR}/{filename2}")
 
     _, warning = migrator.show_migrations()
@@ -534,7 +499,6 @@ def test_show_warning_plural(migrator: Migrator, migrator_init: None, ch_client:
     assert f"{filename1}: checksum mismatch" in plain_warning
     assert f"{filename2}: migration file missing" in plain_warning
 
-    # clean
     ch_client.execute("DROP TABLE IF EXISTS test_plural_1")
     ch_client.execute("DROP TABLE IF EXISTS test_plural_2")
 
@@ -548,7 +512,6 @@ def test_show_warning_stderr(migrator: Migrator, migrator_init: None, ch_client:
     )
     migrator.up()
 
-    # modify file to trigger checksum mismatch
     filepath = f"{DEFAULT_MIGRATIONS_DIR}/{filename}"
     with open(filepath, "w") as f:
         f.write(
@@ -563,7 +526,6 @@ def test_show_warning_stderr(migrator: Migrator, migrator_init: None, ch_client:
 
     assert "WARNING" in click.unstyle(result.stderr)
 
-    # clean
     ch_client.execute("DROP TABLE IF EXISTS test_stderr")
 
 
@@ -589,8 +551,6 @@ def test_show_head_modified_combo_color(migrator: Migrator, migrator_init: None,
     plain = click.unstyle(output)
 
     assert "(HEAD, modified)" in plain
-    # styled output should contain yellow color for the combo suffix
     assert click.style("(HEAD, modified)", fg="yellow") in output
 
-    # clean
     ch_client.execute("DROP TABLE IF EXISTS test_combo")
