@@ -48,9 +48,6 @@ def cluster_migrator(node1: Client) -> Generator[Migrator]:
     node1.execute(f"DROP TABLE IF EXISTS _migrations_lock ON CLUSTER {CLUSTER_NAME} SYNC")
 
 
-# --- Group 1: Service tables replicated ---
-
-
 def test_migrations_table_exists_on_both_nodes(cluster_migrator: Migrator, node1: Client, node2: Client) -> None:
     assert table_exists(node1, "db_migrations")
     assert table_exists(node2, "db_migrations")
@@ -71,9 +68,6 @@ def test_lock_table_engine_is_replicated(node1: Client, cluster_migrator: Migrat
     MigrationLock(client=node1, db="test", cluster=CLUSTER_NAME)
     engine = get_engine(node1, "_migrations_lock")
     assert "Replicated" in engine
-
-
-# --- Group 2: Migration state replication ---
 
 
 def test_migration_applied_on_node1_visible_on_node2(cluster_migrator: Migrator, node2: Client) -> None:
@@ -149,9 +143,6 @@ def test_rollback_on_node1_reflected_on_node2(cluster_migrator: Migrator, node2:
     assert count == 0
 
 
-# --- Group 3: Cross-node migrator handoff ---
-
-
 def test_migrator_on_node2_sees_node1_migrations(cluster_migrator: Migrator) -> None:
     create_test_migration(
         name="handoff_test",
@@ -163,9 +154,6 @@ def test_migrator_on_node2_sees_node1_migrations(cluster_migrator: Migrator) -> 
     m2 = Migrator(database_url=NODE_2_URL, cluster=CLUSTER_NAME)
     unapplied = m2.get_unapplied_migration_names()
     assert unapplied == []
-
-
-# --- Group 4: Distributed lock ---
 
 
 @pytest.mark.usefixtures("cluster_migrator")
@@ -191,9 +179,6 @@ def test_lock_on_node1_blocks_acquire_on_node2(node1: Client, node2: Client) -> 
         lock2.acquire()
 
     lock1.release()
-
-
-# --- Group 5: Concurrent pods race condition ---
 
 
 def test_concurrent_pods_race_condition(cluster_migrator: Migrator) -> None:

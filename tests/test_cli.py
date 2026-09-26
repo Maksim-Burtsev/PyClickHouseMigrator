@@ -46,16 +46,10 @@ def mock_migrator() -> Generator[MagicMock]:
         yield instance
 
 
-# --- version ---
-
-
 def test_version_flag(runner: CliRunner) -> None:
     result = runner.invoke(main, ["--version"])
     assert result.exit_code == 0
     assert "py-clickhouse-migrator" in result.output
-
-
-# --- logging flags ---
 
 
 def test_verbose_flag(runner: CliRunner, mock_migrator: MagicMock) -> None:
@@ -70,9 +64,6 @@ def test_quiet_flag(runner: CliRunner, mock_migrator: MagicMock) -> None:
     assert result.exit_code == 0
 
 
-# --- init ---
-
-
 def test_cli_init(runner: CliRunner, tmp_path: pytest.TempPathFactory) -> None:
     path = str(tmp_path / "migrations")
     result = runner.invoke(main, ["--path", path, "init"])
@@ -84,9 +75,6 @@ def test_cli_init_default_path(runner: CliRunner) -> None:
     result = runner.invoke(main, ["init"])
     assert result.exit_code == 0
     assert os.path.isdir(DEFAULT_MIGRATIONS_DIR)
-
-
-# --- new ---
 
 
 def test_cli_new(runner: CliRunner, tmp_path: pytest.TempPathFactory) -> None:
@@ -126,9 +114,6 @@ def test_cli_new_missing_dir(runner: CliRunner, tmp_path: pytest.TempPathFactory
     result = runner.invoke(main, ["--path", path, "new", "test"])
     assert result.exit_code == 1
     assert "not found" in result.stderr
-
-
-# --- up ---
 
 
 def test_up_dry_run_output_visible_with_quiet(runner: CliRunner) -> None:
@@ -241,9 +226,6 @@ def test_cli_up_with_number(runner: CliRunner, mock_migrator: MagicMock) -> None
     mock_migrator.up.assert_called_once_with(n=3, allow_dirty=False, validate=True)
 
 
-# --- rollback ---
-
-
 def test_rollback_dry_run_output_visible_with_quiet(runner: CliRunner) -> None:
     migrations = [
         Migration(
@@ -308,9 +290,6 @@ def test_cli_rollback_no_validate(runner: CliRunner, mock_migrator: MagicMock) -
     mock_migrator.rollback.assert_called_once_with(number=1, validate=False)
 
 
-# --- show ---
-
-
 def test_cli_show(runner: CliRunner, mock_migrator: MagicMock) -> None:
     mock_migrator.show_migrations.return_value = ShowMigrationsResult("Applied: 0", "")
     result = runner.invoke(main, ["--url", FAKE_URL, "show"])
@@ -332,9 +311,6 @@ def test_cli_show_warning_to_stderr(runner: CliRunner, mock_migrator: MagicMock)
     assert result.exit_code == 0
     assert "output" in result.output
     assert "WARNING: 1 issue" in result.stderr
-
-
-# --- baseline ---
 
 
 def test_cli_baseline_no_lock(runner: CliRunner, mock_migrator: MagicMock) -> None:
@@ -403,9 +379,6 @@ def test_cli_baseline_handled_exception_clean_output(runner: CliRunner) -> None:
     assert "Traceback" not in result.output
 
 
-# --- repair ---
-
-
 def test_cli_repair_nothing(runner: CliRunner, mock_migrator: MagicMock) -> None:
     mock_migrator.validate_checksums.return_value = []
     result = runner.invoke(main, ["--url", FAKE_URL, "repair"])
@@ -434,9 +407,6 @@ def test_cli_repair_missing_file(runner: CliRunner, mock_migrator: MagicMock) ->
     assert "file missing (skipped)" in result.output
 
 
-# --- force-unlock ---
-
-
 def test_cli_force_unlock(runner: CliRunner, mock_migrator: MagicMock) -> None:
     mock_migrator.get_db_name.return_value = "test"
     mock_migrator.ch_client = MagicMock()
@@ -450,9 +420,6 @@ def test_cli_force_unlock(runner: CliRunner, mock_migrator: MagicMock) -> None:
     assert "Lock forcefully released" in result.output
     mock_lock_cls.assert_called_once_with(client=mock_migrator.ch_client, db="test", cluster="")
     mock_lock.release.assert_called_once_with(force=True)
-
-
-# --- lock-info ---
 
 
 def test_cli_lock_info_no_lock(runner: CliRunner, mock_migrator: MagicMock) -> None:
@@ -483,9 +450,6 @@ def test_cli_lock_info_active_lock(runner: CliRunner, mock_migrator: MagicMock) 
     assert "Locked by: host:123" in result.output
     assert "2026-01-15 10:30:00" in result.output
     assert "2026-01-15 10:35:00" in result.output
-
-
-# --- SafeGroup error handling ---
 
 
 @pytest.mark.parametrize(
@@ -554,9 +518,6 @@ def test_unexpected_error_not_handled(runner: CliRunner) -> None:
 
     assert result.exit_code != 0
     assert isinstance(result.exception, RuntimeError)
-
-
-# --- CLI option pass-through ---
 
 
 def test_cluster_option_passed_to_migrator(runner: CliRunner) -> None:

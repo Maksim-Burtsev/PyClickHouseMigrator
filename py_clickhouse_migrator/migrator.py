@@ -36,9 +36,9 @@ logger = logging.getLogger("py_clickhouse_migrator")
 SQL = str
 ClickHouseSettings = dict[str, str | int]
 
-_SQL_IDENTIFIER_RE: Final[re.Pattern[str]] = re.compile(r"[a-zA-Z_][a-zA-Z0-9_]*\Z")  # cluster name, db name
+_SQL_IDENTIFIER_RE: Final[re.Pattern[str]] = re.compile(r"[a-zA-Z_][a-zA-Z0-9_]*\Z")
 _UNKNOWN_DATABASE_CODE: Final[int] = 81
-_MIGRATION_NAME_RE: Final[re.Pattern[str]] = re.compile(r"[a-zA-Z0-9_]+\Z")  # migration name suffix in filename
+_MIGRATION_NAME_RE: Final[re.Pattern[str]] = re.compile(r"[a-zA-Z0-9_]+\Z")
 
 _CLUSTER_SETTINGS: ClickHouseSettings = {
     "insert_quorum": "auto",
