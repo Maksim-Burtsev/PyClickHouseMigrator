@@ -112,6 +112,7 @@ def up() -> str:
     CREATE TABLE users (id UInt64) ENGINE = MergeTree ORDER BY id
     """
 
+
 def rollback() -> str:
     return """
     DROP TABLE users
