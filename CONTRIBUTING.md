@@ -30,16 +30,19 @@ uv run pytest tests/ -m cluster -v
 
 ## Before opening a PR
 
-The same three checks CI runs:
+The same checks CI runs (or `make lint`):
 
 ```sh
 uv run ruff check .
 uv run ruff format --check .
 uv run mypy py_clickhouse_migrator/
+uv run python scripts/check_no_comments.py
 ```
 
 ## Guidelines
 
+- No comments in Python code: express intent through names, types, and docstrings.
+  `scripts/check_no_comments.py` enforces this in CI.
 - Add a test for any behavior change — the test suite is the reason this tool is
   safe to point at a production schema.
 - Keep the dependency set small. `click` and `clickhouse-driver` are the only

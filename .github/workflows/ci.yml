@@ -31,6 +31,8 @@ jobs:
         run: uv run ruff format --check .
       - name: mypy
         run: uv run mypy py_clickhouse_migrator/
+      - name: no comments
+        run: uv run python scripts/check_no_comments.py
 
   test:
     # Keep this name stable: the master ruleset requires these exact check
