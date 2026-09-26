@@ -1,5 +1,5 @@
-from .checksum import compute_checksum, normalize_content
-from .errors import (
+from py_clickhouse_migrator.checksum import compute_checksum, normalize_content
+from py_clickhouse_migrator.errors import (
     ChecksumMismatchError,
     ClickHouseServerIsNotHealthyError,
     DatabaseNotFoundError,
@@ -7,8 +7,8 @@ from .errors import (
     MigrationDirectoryNotFoundError,
     MissingDatabaseUrlError,
 )
-from .lock import LockError, LockTimeoutError, MigrationLock
-from .migrator import (
+from py_clickhouse_migrator.lock import LockError, LockTimeoutError, MigrationLock
+from py_clickhouse_migrator.migrator import (
     ChecksumMismatch,
     Migrator,
     ShowMigrationsResult,
@@ -27,8 +27,8 @@ __all__ = [
     "LockTimeoutError",
     "MigrationDirectoryNotFoundError",
     "MigrationLock",
-    "MissingDatabaseUrlError",
     "Migrator",
+    "MissingDatabaseUrlError",
     "ShowMigrationsResult",
     "compute_checksum",
     "create_migration_file",

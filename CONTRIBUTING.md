@@ -35,7 +35,8 @@ The same checks CI runs (or `make lint`):
 ```sh
 uv run ruff check .
 uv run ruff format --check .
-uv run mypy py_clickhouse_migrator/
+uv run flake8 .
+uv run mypy
 uv run python scripts/check_no_comments.py
 ```
 
