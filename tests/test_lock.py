@@ -217,6 +217,15 @@ def test_invalid_cluster_name(cluster: str) -> None:
     client.execute.assert_not_called()
 
 
+def test_db_name_may_end_with_newline() -> None:
+    """A URL from a file-backed secret often ends with a newline; the lock accepts it as 2.1 did."""
+    client = MagicMock(spec=Client)
+
+    MigrationLock(client=client, db="test\n", cluster="test_cluster\n")
+
+    client.execute.assert_called_once()
+
+
 def test_is_locked(lock: MigrationLock, second_lock: MigrationLock) -> None:
     """is_locked reports a lock held by any worker, not only by the one asking."""
     assert _observe_acquire_release(lock, observer=second_lock) == UNLOCKED_LOCKED_UNLOCKED

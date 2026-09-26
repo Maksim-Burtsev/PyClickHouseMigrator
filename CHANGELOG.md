@@ -6,7 +6,6 @@ This project follows [Semantic Versioning](https://semver.org/): breaking change
 ## Unreleased
 
 - `migrator --help` and `migrator <command> --help` now show a one-line description of each command
-- `MigrationLock` now rejects database and cluster names that end with a newline, using the same identifier check `Migrator` applies to cluster names
 - Internal refactoring to pass wemake-python-styleguide and a stricter ruff and mypy setup; the migration format, CLI options and output, and the Python API are unchanged
 
 ## 2.1.0 — 2026-08-23

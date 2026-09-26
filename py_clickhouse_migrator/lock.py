@@ -8,6 +8,7 @@ cannot hold the lock forever.
 import datetime as dt
 import logging
 import os
+import re
 import socket
 import time
 from dataclasses import dataclass
@@ -17,7 +18,7 @@ from uuid import uuid4
 
 from clickhouse_driver import Client
 
-from py_clickhouse_migrator.clickhouse import ClickHouseSettings, cluster_settings, is_sql_identifier, on_cluster_clause
+from py_clickhouse_migrator.clickhouse import ClickHouseSettings, cluster_settings, on_cluster_clause
 
 logger = logging.getLogger("py_clickhouse_migrator")
 
@@ -25,6 +26,7 @@ LOCK_TABLE: Final = "_migrations_lock"
 DEFAULT_LOCK_TTL: Final = 300
 
 _LOCK_ID: Final = "migration"
+_NAME_ALLOWING_TRAILING_NEWLINE: Final = re.compile(r"[a-zA-Z_][a-zA-Z0-9_]*$")
 _WORKER_TOKEN_LENGTH: Final = 8
 _DT_FMT: Final = "%Y-%m-%d %H:%M:%S"
 _ENGINE: Final = "ReplacingMergeTree(locked_at)"
@@ -78,7 +80,8 @@ class MigrationLock:
         cluster: ClickHouse cluster name for replicated lock table.
 
     Raises:
-        ValueError: ``db`` or ``cluster`` is not a valid SQL identifier.
+        ValueError: ``db`` or ``cluster`` is not a valid SQL identifier. A single trailing newline is
+            accepted: a URL read from a file-backed secret often ends with one, and ClickHouse ignores it.
 
     """
 
@@ -92,9 +95,9 @@ class MigrationLock:
         cluster: str = "",
     ) -> None:
         """Validate names, pick a unique owner id for this worker, and create the lock table."""
-        if not is_sql_identifier(db):
+        if not _NAME_ALLOWING_TRAILING_NEWLINE.match(db):
             raise ValueError(f"Invalid database name: {db!r}")
-        if cluster and not is_sql_identifier(cluster):
+        if cluster and not _NAME_ALLOWING_TRAILING_NEWLINE.match(cluster):
             raise ValueError(f"Invalid cluster name: {cluster!r}")
         self._client = client
         self._db = db
