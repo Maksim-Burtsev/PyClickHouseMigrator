@@ -148,12 +148,13 @@ def test_context_manager_on_exception(lock: MigrationLock) -> None:
     assert not lock.is_locked()
 
 
-def test_retry_acquire(lock: MigrationLock, second_lock: MigrationLock) -> None:
-    """A waiting worker takes the lock on retry once the holder releases it during the retry delay."""
+@pytest.mark.parametrize("retry_count", [1, 2])
+def test_retry_acquire(lock: MigrationLock, second_lock: MigrationLock, retry_count: int) -> None:
+    """A waiting worker takes the lock on the first retry once the holder releases it, spare retries or not."""
     lock.acquire()
 
     with patch(LOCK_SLEEP, side_effect=lambda _delay: lock.release()):
-        second_lock.acquire(retry_count=1, retry_delay=1.0)
+        second_lock.acquire(retry_count=retry_count, retry_delay=1.0)
 
     assert second_lock.is_locked()
     second_lock.release()

@@ -136,6 +136,20 @@ def test_up_fails_on_checksum_mismatch(migrator: Migrator, migrator_init: None, 
     drop_tables(ch_client, "test_mismatch")
 
 
+def test_up_fails_on_missing_applied_file(migrator: Migrator, migrator_init: None, ch_client: Client) -> None:
+    """Deleting an applied migration file blocks the next up() and names the missing file."""
+    filename = _create_table_migration("test_missing_up")
+    migrator.up()
+    _delete_migration_file(filename)
+
+    with pytest.raises(ChecksumMismatchError) as mismatch_error:
+        migrator.up()
+
+    assert f"{filename}: file missing" in str(mismatch_error.value)
+
+    drop_tables(ch_client, "test_missing_up")
+
+
 def test_up_allow_dirty_skips_validation(migrator: Migrator, migrator_init: None, ch_client: Client) -> None:
     """allow_dirty=True is the escape hatch that lets up() run despite an edited applied migration."""
     filename = _create_table_migration("test_dirty")
