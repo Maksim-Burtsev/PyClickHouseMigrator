@@ -6,6 +6,7 @@
 
 - [ ] `uv run ruff check . && uv run ruff format --check .`
 - [ ] `uv run mypy py_clickhouse_migrator/`
+- [ ] `uv run python scripts/check_no_comments.py`
 - [ ] `uv run pytest` passes against a live ClickHouse
 - [ ] Tests added or updated for the behavior change
 - [ ] Docs / README / `llms.txt` updated if the CLI surface changed

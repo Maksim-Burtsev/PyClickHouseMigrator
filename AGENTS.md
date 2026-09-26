@@ -22,7 +22,7 @@ Setup: `uv sync --dev`. Always run tools through `uv run`.
 | Lint | `uv run ruff check .` |
 | Format | `uv run ruff format .` (CI runs `uv run ruff format --check .`) |
 | Types | `uv run mypy py_clickhouse_migrator/` |
-| All CI lint checks | `make lint` |
+| All CI lint checks | `make lint` (ruff, format, mypy, no-comments check) |
 | Start test ClickHouse | `docker compose -f docker-compose.test.yml up -d --wait` |
 | Tests | `uv run pytest` |
 | Single test | `uv run pytest tests/test_migrator.py::test_init_base -v` |
@@ -68,6 +68,20 @@ maintainer decision and a major version bump.
 - **CLI surface.** Command names, options, `CLICKHOUSE_MIGRATE_*` environment variables, exit codes,
   and output that CI pipelines parse.
 - **Python API.** Everything in `py_clickhouse_migrator.__all__` and in `docs/python-api.md`.
+
+## No comments
+
+Comments are banned in all Python code: package, tests, and scripts. The ban covers every `#`
+comment, including section headers, commented-out code, and tool directives such as `# noqa`,
+`# type: ignore`, and `# pragma: no cover`. `scripts/check_no_comments.py` enforces it in CI,
+`make lint`, and pre-commit. Docstrings are allowed.
+
+- Carry meaning in code: precise names, small functions, named constants, types, and test names.
+- If a reader still needs to know *why*, write a docstring on the module, class, function, or test.
+- Fix type and lint errors at their cause instead of suppressing them. If a suppression looks
+  unavoidable, stop and ask the maintainer instead of adding one.
+- Delete dead or commented-out code; git history keeps it.
+- When you edit a file, do not add comments to explain your change. Put that in the commit message.
 
 ## Code conventions
 
