@@ -121,8 +121,9 @@ def create_migration_file(migrations_dir: str = DEFAULT_MIGRATIONS_DIR, name: st
     if not name:
         logger.warning("Migration name is recommended: py-clickhouse-migrator new <name>")
 
+    filename = make_migration_filename(name)
     directory = migrations_dir.removesuffix("/")
-    filepath = f"{directory}/{make_migration_filename(name)}"
+    filepath = f"{directory}/{filename}" if migrations_dir else filename
     try:
         Path(filepath).write_text(MIGRATION_TEMPLATE, encoding="utf-8")
     except FileNotFoundError:

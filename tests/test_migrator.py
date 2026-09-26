@@ -452,6 +452,16 @@ def test_create_migration_file_with_name(migrator_init: None) -> None:
     assert MIGRATION_FILENAME_REGEX.match(filename)
 
 
+def test_create_migration_file_in_cwd(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """An empty migrations directory means the current one, as in ``migrator --path "" new``."""
+    monkeypatch.chdir(tmp_path)
+
+    filepath = create_migration_file(migrations_dir="", name="here")
+
+    assert filepath == Path(filepath).name
+    assert Path(filepath).is_file()
+
+
 def test_get_applied_migrations_names(
     migrator: Migrator,
     test_tables_from_migration: list[str],
