@@ -5,6 +5,7 @@ This project follows [Semantic Versioning](https://semver.org/): breaking change
 
 ## Unreleased
 
+- Added Python 3.15 support: the classifier and a 3.15 job in the CI test matrix
 - `migrator --help` and `migrator <command> --help` now show a one-line description of each command
 - Internal refactoring to pass wemake-python-styleguide and a stricter ruff and mypy setup; the migration format, CLI options and output, and the Python API are unchanged
 

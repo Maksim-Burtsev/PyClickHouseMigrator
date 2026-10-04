@@ -54,6 +54,8 @@ jobs:
             clickhouse: "latest"
           - python-version: "3.14"
             clickhouse: "latest"
+          - python-version: "3.15"
+            clickhouse: "latest"
 
     services:
       clickhouse:
@@ -78,6 +80,7 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
+          allow-prereleases: true
       - run: uv sync --dev
 
       - name: Wait for ClickHouse service
