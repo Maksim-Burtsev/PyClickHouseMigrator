@@ -3,7 +3,7 @@
 All notable changes to this project are documented here.
 This project follows [Semantic Versioning](https://semver.org/): breaking changes only in major releases.
 
-## Unreleased
+## 2.2.0 — 2026-10-04
 
 - Added Python 3.15 support: the classifier and a 3.15 job in the CI test matrix
 - `migrator --help` and `migrator <command> --help` now show a one-line description of each command
