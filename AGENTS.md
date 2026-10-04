@@ -16,7 +16,7 @@ or execution.
   then run `uv run pytest` from the repo root, because tests write to `./db/migrations` relative to it.
 - `pytest` deselects tests marked `cluster`. `make test-cluster` starts a two-node cluster, runs them,
   and stops it.
-- CI runs the suite on Python 3.11–3.14 against ClickHouse 24.8, 25.3, and latest: code must work on
+- CI runs the suite on Python 3.11–3.15 against ClickHouse 24.8, 25.3, and latest: code must work on
   the oldest of each.
 
 ## Invariants

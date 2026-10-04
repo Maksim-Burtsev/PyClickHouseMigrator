@@ -18,7 +18,7 @@ uv tool install py-clickhouse-migrator
 <p align="center">
 <a href="https://github.com/Maksim-Burtsev/PyClickHouseMigrator/actions"><img src="https://github.com/Maksim-Burtsev/PyClickHouseMigrator/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 <a href="https://pypi.org/project/py-clickhouse-migrator/"><img src="https://img.shields.io/pypi/v/py-clickhouse-migrator" alt="PyPI"></a>
-<a href="https://pypi.org/project/py-clickhouse-migrator/"><img src="https://img.shields.io/badge/python-3.11%20|%203.12%20|%203.13%20|%203.14-blue" alt="Python"></a>
+<a href="https://pypi.org/project/py-clickhouse-migrator/"><img src="https://img.shields.io/badge/python-3.11%20|%203.12%20|%203.13%20|%203.14%20|%203.15-blue" alt="Python"></a>
 <a href="https://github.com/Maksim-Burtsev/PyClickHouseMigrator/actions/workflows/ci.yml"><img src="https://img.shields.io/badge/ClickHouse-24.8%20|%2025.3%20|%20latest-yellow" alt="Tested ClickHouse versions"></a>
 <a href="https://maksim-burtsev.github.io/PyClickHouseMigrator/"><img src="https://img.shields.io/badge/docs-GitHub%20Pages-blue" alt="Docs"></a>
 <a href="https://codecov.io/gh/Maksim-Burtsev/PyClickHouseMigrator"><img src="https://codecov.io/gh/Maksim-Burtsev/PyClickHouseMigrator/branch/master/graph/badge.svg" alt="codecov"></a>
@@ -552,7 +552,7 @@ PyClickHouseMigrator follows [Semantic Versioning](https://semver.org/).
 - The CLI surface, the migration file format, and the service table schema are
   the public API. Breaking changes to any of them only happen in a major release.
 - `2.x` is production-ready. It is tested on every release against ClickHouse
-  24.8, 25.3, and `latest`, on Python 3.11 through 3.14, in both single-node and
+  24.8, 25.3, and `latest`, on Python 3.11 through 3.15, in both single-node and
   `ON CLUSTER` mode.
 - Pin a major tag (`py-clickhouse-migrator>=2,<3`, or the Docker tag `:2`) and
   upgrades stay safe.
