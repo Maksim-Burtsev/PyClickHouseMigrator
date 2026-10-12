@@ -23,7 +23,7 @@ jobs:
           enable-cache: true
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.15"
+          python-version: "3.11"
       - run: uv sync --dev
       - name: ruff check
         run: uv run ruff check .

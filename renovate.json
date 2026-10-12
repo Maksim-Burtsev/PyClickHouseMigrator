@@ -11,6 +11,12 @@
       "matchDepTypes": ["devDependencies"],
       "matchUpdateTypes": ["minor", "patch"],
       "automerge": true
+    },
+    {
+      "description": "The lint job runs on the oldest supported Python, so wemake and mypy never suggest syntax the package cannot use; bump it by hand with requires-python.",
+      "matchDepNames": ["python"],
+      "matchCurrentValue": "3.11",
+      "enabled": false
     }
   ]
 }
