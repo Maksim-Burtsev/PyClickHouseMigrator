@@ -22,7 +22,7 @@ jobs:
       - uses: astral-sh/setup-uv@v10.3.0
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.14"
+          python-version: "3.15"
       - name: Build documentation site
         run: uv run --frozen --group docs zensical build --strict --clean
       - name: Upload Pages artifact
