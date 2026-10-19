@@ -1,4 +1,4 @@
-FROM python:3.14-slim
+FROM python:3.15-slim
 
 LABEL maintainer="Maksim Burtsev <zadrot-lol@list.ru>"
 LABEL org.opencontainers.image.title="PyClickHouseMigrator"
