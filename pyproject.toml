@@ -64,7 +64,7 @@ dev = [
     "wemake-python-styleguide>=1.8.1",
 ]
 docs = [
-    "zensical==0.0.71",
+    "zensical==0.0.72",
 ]
 
 [build-system]
